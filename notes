@@ -1,0 +1,198 @@
+-- Describes a person or an organization.
+CREATE TABLE PARTY (
+    PARTY_ID SERIAL PRIMARY KEY,
+    CREDIT_RATING VARCHAR(255)
+);
+COMMENT ON TABLE PARTY IS 'Represents a person or an organization that the enterprise interacts with.';
+COMMENT ON COLUMN PARTY.CREDIT_RATING IS 'The credit rating of the party.';
+-- NEW: Describes an organizational department. Can have a parent for hierarchies.
+CREATE TABLE DEPARTMENT (
+    DEPARTMENT_ID SERIAL PRIMARY KEY,
+    DEPARTMENT_NAME VARCHAR(255) NOT NULL,
+    PARENT_DEPARTMENT_ID INT REFERENCES DEPARTMENT(DEPARTMENT_ID)
+);
+COMMENT ON TABLE DEPARTMENT IS 'Stores organizational departments. A department can optionally belong to a parent department.';
+COMMENT ON COLUMN DEPARTMENT.PARENT_DEPARTMENT_ID IS 'A self-referencing key to model department hierarchies.';
+-- MODIFIED: Renamed from PERSON. Stores detailed information about an employee, as a subtype of PARTY.
+
+create table public.employee (
+  party_id integer not null,
+  gender character varying(50) null,
+  birth_date date null,
+  marital_status character varying(50) null,
+  name_english character varying(255) not null,
+  name_arabic character varying(255) null,
+  nationality character varying(100) null,
+  mobile_number character varying(25) not null,
+  email character varying(255) null,
+  emergency_contact_number character varying(25) null,
+  religion character varying(50) null,
+  blood_group character varying(5) null,
+  constraint employee_pkey primary key (party_id),
+  constraint employee_email_unique unique (email),
+  constraint employee_party_id_fkey foreign KEY (party_id) references party (party_id)
+) TABLESPACE pg_default;
+
+
+-- Describes an organization, as a subtype of PARTY.
+
+CREATE TABLE ORGANIZATION (
+    PARTY_ID INT PRIMARY KEY REFERENCES PARTY(PARTY_ID),
+    NAME VARCHAR(255),
+    FEDERAL_TAX_ID_NUM VARCHAR(50)
+);
+COMMENT ON TABLE ORGANIZATION IS 'Stores detailed information about an organization, as a subtype of PARTY.';
+-- Defines the roles that a party can play, now with a type descriptor.
+CREATE TABLE PARTY_ROLE (
+    PARTY_ROLE_ID SERIAL PRIMARY KEY,
+    PARTY_ID INT NOT NULL REFERENCES PARTY(PARTY_ID),
+    ROLE_TYPE VARCHAR(100) -- e.g., 'Employee', 'Internal Organization', 'Manager'
+);
+COMMENT ON TABLE PARTY_ROLE IS 'Defines a role that a party may have. The specific type of role is defined in the ROLE_TYPE column.';
+COMMENT ON COLUMN PARTY_ROLE.PARTY_ID IS 'Identifies the party playing the role.';
+-- Defines relationships between two party roles, such as employment.
+CREATE TABLE PARTY_RELATIONSHIP (
+    FROM_PARTY_ROLE_ID INT NOT NULL REFERENCES PARTY_ROLE(PARTY_ROLE_ID),
+    TO_PARTY_ROLE_ID INT NOT NULL REFERENCES PARTY_ROLE(PARTY_ROLE_ID),
+    FROM_DATE DATE NOT NULL,
+    THRU_DATE DATE,
+    COMMENT TEXT,
+    PRIMARY KEY (FROM_PARTY_ROLE_ID, TO_PARTY_ROLE_ID, FROM_DATE)
+);
+COMMENT ON TABLE PARTY_RELATIONSHIP IS 'Models a relationship between two parties over a period of time.';
+COMMENT ON COLUMN PARTY_RELATIONSHIP.FROM_DATE IS 'The start date of the relationship.';
+COMMENT ON COLUMN PARTY_RELATIONSHIP.THRU_DATE IS 'The end date of the relationship; null if ongoing.';
+-- Defines an employment relationship between an Employee role and an Internal Organization role.
+CREATE TABLE EMPLOYMENT (
+    FROM_PARTY_ROLE_ID INT,
+    TO_PARTY_ROLE_ID INT,
+    FROM_DATE DATE,
+    PRIMARY KEY (FROM_PARTY_ROLE_ID, TO_PARTY_ROLE_ID, FROM_DATE),
+    FOREIGN KEY (FROM_PARTY_ROLE_ID, TO_PARTY_ROLE_ID, FROM_DATE) REFERENCES PARTY_RELATIONSHIP(FROM_PARTY_ROLE_ID, TO_PARTY_ROLE_ID, FROM_DATE)
+);
+COMMENT ON TABLE EMPLOYMENT IS 'A subtype of PARTY_RELATIONSHIP representing the relationship between an employee and an internal organization.';
+
+-- Defines types of positions, like "Programmer" or "Business Analyst".
+CREATE TABLE POSITION_TYPE (
+    POSITION_TYPE_ID SERIAL PRIMARY KEY,
+    DESCRIPTION TEXT,
+    TITLE VARCHAR(255),
+    BENEFIT_PERCENT NUMERIC(5, 2)
+);
+COMMENT ON TABLE POSITION_TYPE IS 'Maintains common characteristics for a kind of job, such as title and description.';
+-- MODIFIED: Defines a specific job slot, now linked to a DEPARTMENT.
+CREATE TABLE POSITION (
+    POSITION_ID SERIAL PRIMARY KEY,
+    DEPARTMENT_ID INT REFERENCES DEPARTMENT(DEPARTMENT_ID),
+    POSITION_TYPE_ID INT REFERENCES POSITION_TYPE(POSITION_TYPE_ID),
+    ESTIMATED_FROM_DATE DATE,
+    ESTIMATED_THRU_DATE DATE,
+    SALARY_FLAG BOOLEAN,
+    EXEMPT_FLAG BOOLEAN,
+    FULLTIME_FLAG BOOLEAN,
+    TEMPORARY_FLAG BOOLEAN,
+    ACTUAL_FROM_DATE DATE,
+    ACTUAL_THRU_DATE DATE
+);
+COMMENT ON TABLE POSITION IS 'Represents a specific job slot in an enterprise that can be occupied by an employee and belongs to a department.';
+COMMENT ON COLUMN POSITION.DEPARTMENT_ID IS 'The department this position belongs to.';
+-- MODIFIED: Tracks which employee fills which position over time.
+CREATE TABLE POSITION_FULFILLMENT (
+    POSITION_ID INT NOT NULL REFERENCES POSITION(POSITION_ID),
+    EMPLOYEE_PARTY_ID INT NOT NULL REFERENCES EMPLOYEE(PARTY_ID),
+    FROM_DATE DATE NOT NULL,
+    THRU_DATE DATE,
+    COMMENT TEXT,
+    PRIMARY KEY (POSITION_ID, EMPLOYEE_PARTY_ID, FROM_DATE)
+);
+COMMENT ON TABLE POSITION_FULFILLMENT IS 'Resolves the many-to-many relationship between EMPLOYEE and POSITION, tracking job history.';
+-- Defines the reporting hierarchy between positions.
+CREATE TABLE POSITION_REPORTING_STRUCTURE (
+    POSITION_ID_REPORTS_TO INT NOT NULL REFERENCES POSITION(POSITION_ID),
+    POSITION_ID_REPORTING INT NOT NULL REFERENCES POSITION(POSITION_ID),
+    FROM_DATE DATE NOT NULL,
+    THRU_DATE DATE,
+    PRIMARY_FLAG BOOLEAN,
+    COMMENT TEXT,
+    PRIMARY KEY (POSITION_ID_REPORTS_TO, POSITION_ID_REPORTING, FROM_DATE)
+);
+COMMENT ON TABLE POSITION_REPORTING_STRUCTURE IS 'Links a position to the position it reports to, tracking the organizational hierarchy over time.';
+-- Defines types of job responsibilities.
+CREATE TABLE RESPONSIBILITY_TYPE (
+    RESPONSIBILITY_TYPE_ID SERIAL PRIMARY KEY,
+    DESCRIPTION TEXT
+);
+COMMENT ON TABLE RESPONSIBILITY_TYPE IS 'Defines various job responsibilities that can be assigned to positions.';
+-- Assigns specific responsibilities to a given position.
+CREATE TABLE POSITION_RESPONSIBILITY (
+    POSITION_ID INT NOT NULL REFERENCES POSITION(POSITION_ID),
+    RESPONSIBILITY_TYPE_ID INT NOT NULL REFERENCES RESPONSIBILITY_TYPE(RESPONSIBILITY_TYPE_ID),
+    FROM_DATE DATE NOT NULL,
+    THRU_DATE DATE,
+    COMMENT TEXT,
+    PRIMARY KEY (POSITION_ID, RESPONSIBILITY_TYPE_ID, FROM_DATE)
+);
+COMMENT ON TABLE POSITION_RESPONSIBILITY IS 'Assigns and tracks the actual responsibilities for any given position over time.';
+
+-- MODIFIED: Tracks employment applications from candidates, who are potential employees.
+CREATE TABLE EMPLOYMENT_APPLICATION (
+    APPLICATION_ID SERIAL PRIMARY KEY,
+    APPLICANT_PARTY_ID INT NOT NULL REFERENCES PARTY(PARTY_ID),
+    POSITION_ID INT REFERENCES POSITION(POSITION_ID),
+    APPLICATION_DATE DATE,
+    STATUS VARCHAR(100), -- e.g., received, reviewed, rejected
+    SOURCE VARCHAR(100), -- e.g., newspaper, personal referral, Internet
+    REFERRED_BY_PARTY_ID INT REFERENCES PARTY(PARTY_ID)
+);
+COMMENT ON TABLE EMPLOYMENT_APPLICATION IS 'Maintains information about employment applications to track the recruiting process.';
+COMMENT ON COLUMN EMPLOYMENT_APPLICATION.APPLICANT_PARTY_ID IS 'The party (a potential employee) submitting the application.';
+-- Defines types of skills.
+CREATE TABLE SKILL_TYPE (
+    SKILL_TYPE_ID SERIAL PRIMARY KEY,
+    DESCRIPTION TEXT
+);
+COMMENT ON TABLE SKILL_TYPE IS 'Defines the different types of skills that can be tracked for a party.';
+-- Tracks the skills held by a party (employee or organization).
+CREATE TABLE PARTY_SKILL (
+    PARTY_ID INT NOT NULL REFERENCES PARTY(PARTY_ID),
+    SKILL_TYPE_ID INT NOT NULL REFERENCES SKILL_TYPE(SKILL_TYPE_ID),
+    STARTED_USING_DATE DATE,
+    YEARS_EXPERIENCE INT,
+    SKILL_LEVEL VARCHAR(100),
+    PRIMARY KEY (PARTY_ID, SKILL_TYPE_ID)
+);
+COMMENT ON TABLE PARTY_SKILL IS 'Tracks the skills and qualifications for employees and organizations.';
+-- MODIFIED: Tracks the performance reviews of an employee via their role.
+CREATE TABLE PERFORMANCE_REVIEW (
+    PERF_REVIEW_ID SERIAL PRIMARY KEY,
+    RECEIVER_PARTY_ROLE_ID INT NOT NULL REFERENCES PARTY_ROLE(PARTY_ROLE_ID),
+    MANAGER_PARTY_ROLE_ID INT NOT NULL REFERENCES PARTY_ROLE(PARTY_ROLE_ID),
+    FROM_DATE DATE,
+    THRU_DATE DATE,
+    COMMENTS TEXT
+);
+COMMENT ON TABLE PERFORMANCE_REVIEW IS 'Maintains information regarding employee performance reviews and notes.';
+-- Defines the reason for an employment termination.
+CREATE TABLE TERMINATION_REASON (
+    TERM_REASON_ID SERIAL PRIMARY KEY,
+    DESCRIPTION VARCHAR(255) NOT NULL
+);
+COMMENT ON TABLE TERMINATION_REASON IS 'Maintains the description explaining the cause of the termination, e.g., "insubordination", "took new job".';
+-- Defines the category of an employment termination.
+CREATE TABLE TERMINATION_TYPE (
+    TERMINATION_TYPE_ID SERIAL PRIMARY KEY,
+    DESCRIPTION VARCHAR(255) NOT NULL
+);
+COMMENT ON TABLE TERMINATION_TYPE IS 'Stores the kind of termination that occurred, such as "resignation", "firing", or "retirement".';
+-- Tracks unemployment claims that may arise from terminations.
+CREATE TABLE UNEMPLOYMENT_CLAIM (
+    UNEMPLOYMENT_CLAIM_ID SERIAL PRIMARY KEY,
+    FROM_PARTY_ROLE_ID INT,
+    TO_PARTY_ROLE_ID INT,
+    EMPLOYMENT_FROM_DATE DATE,
+    UNEMPLOYMENT_CLAIM_DATE DATE,
+    DESCRIPTION TEXT,
+    STATUS VARCHAR(100), -- e.g., filed, pending, accepted, rejected
+    FOREIGN KEY (FROM_PARTY_ROLE_ID, TO_PARTY_ROLE_ID, EMPLOYMENT_FROM_DATE) REFERENCES EMPLOYMENT(FROM_PARTY_ROLE_ID, TO_PARTY_ROLE_ID, FROM_DATE)
+);
+COMMENT ON TABLE UNEMPLOYMENT_CLAIM IS 'Maintains information about unemployment claims related to employee terminations.';
