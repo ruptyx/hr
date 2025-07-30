@@ -1,0 +1,360 @@
+-- HR Admin Dashboard Function - Updated for new schema
+CREATE OR REPLACE FUNCTION get_admin_dashboard_data()
+RETURNS jsonb AS $$
+DECLARE
+    metrics jsonb;
+    onboarding_list jsonb;
+    offboarding_list jsonb;
+    pending_requests jsonb;
+BEGIN
+    -- 1. Calculate key metrics
+    SELECT jsonb_build_object(
+        'headcount', (
+            SELECT COUNT(*) FROM employment e
+            JOIN party_relationship pr ON e.from_party_role_id = pr.from_party_role_id 
+                AND e.to_party_role_id = pr.to_party_role_id 
+                AND e.from_date = pr.from_date
+            WHERE pr.thru_date IS NULL OR pr.thru_date > CURRENT_DATE
+        ),
+        'newHiresThisMonth', (
+            SELECT COUNT(*) FROM employment
+            WHERE from_date >= date_trunc('month', CURRENT_DATE)
+            AND from_date < date_trunc('month', CURRENT_DATE) + interval '1 month'
+        ),
+        'terminationsThisMonth', (
+            SELECT COUNT(*) FROM employment e
+            JOIN party_relationship pr ON e.from_party_role_id = pr.from_party_role_id 
+                AND e.to_party_role_id = pr.to_party_role_id 
+                AND e.from_date = pr.from_date
+            WHERE pr.thru_date >= date_trunc('month', CURRENT_DATE)
+            AND pr.thru_date < date_trunc('month', CURRENT_DATE) + interval '1 month'
+        ),
+        'openPositions', (
+            SELECT COUNT(*) FROM position
+            WHERE position_id NOT IN (
+                SELECT position_id FROM position_fulfillment 
+                WHERE thru_date IS NULL OR thru_date > CURRENT_DATE
+            )
+        ),
+        'pendingLeaveRequests', (
+            SELECT COUNT(*) FROM leave_request
+            WHERE status = 'pending'
+        )
+    ) INTO metrics;
+
+    -- 2. Fetch employees who are onboarding (started within last 30 days)
+    SELECT jsonb_agg(emp) INTO onboarding_list FROM (
+        SELECT
+            e.party_id,
+            e.name_english,
+            pf.from_date AS start_date,
+            pt.title AS position_title,
+            d.department_name
+        FROM employee e
+        JOIN position_fulfillment pf ON e.party_id = pf.employee_party_id
+        JOIN position p ON pf.position_id = p.position_id
+        JOIN position_type pt ON p.position_type_id = pt.position_type_id
+        LEFT JOIN department d ON p.department_id = d.department_id
+        WHERE pf.from_date >= CURRENT_DATE - interval '30 days' 
+        AND pf.from_date <= CURRENT_DATE + interval '30 days'
+        AND (pf.thru_date IS NULL OR pf.thru_date > CURRENT_DATE)
+        ORDER BY pf.from_date DESC
+        LIMIT 10
+    ) emp;
+
+    -- 3. Fetch employees who are offboarding (termination date within next 30 days)
+    SELECT jsonb_agg(emp) INTO offboarding_list FROM (
+        SELECT
+            e.party_id,
+            e.name_english,
+            pr.thru_date AS end_date,
+            pt.title AS position_title,
+            d.department_name
+        FROM employee e
+        JOIN party_role pro ON e.party_id = pro.party_id
+        JOIN employment em ON pro.party_role_id = em.from_party_role_id
+        JOIN party_relationship pr ON em.from_party_role_id = pr.from_party_role_id 
+            AND em.to_party_role_id = pr.to_party_role_id 
+            AND em.from_date = pr.from_date
+        LEFT JOIN position_fulfillment pf ON e.party_id = pf.employee_party_id 
+            AND (pf.thru_date IS NULL OR pf.thru_date > CURRENT_DATE)
+        LEFT JOIN position p ON pf.position_id = p.position_id
+        LEFT JOIN position_type pt ON p.position_type_id = pt.position_type_id
+        LEFT JOIN department d ON p.department_id = d.department_id
+        WHERE pr.thru_date IS NOT NULL 
+        AND pr.thru_date > CURRENT_DATE 
+        AND pr.thru_date <= CURRENT_DATE + interval '30 days'
+        ORDER BY pr.thru_date ASC
+        LIMIT 10
+    ) emp;
+
+    -- 4. Fetch recent pending leave requests for admin review
+    SELECT jsonb_agg(req) INTO pending_requests FROM (
+        SELECT
+            lr.leave_request_id,
+            e.name_english AS employee_name,
+            lt.name AS leave_type,
+            lr.start_date,
+            lr.end_date,
+            lr.hours_requested,
+            lr.request_date,
+            lr.reason
+        FROM leave_request lr
+        JOIN employee e ON lr.employee_party_id = e.party_id
+        JOIN leave_type lt ON lr.leave_type_id = lt.leave_type_id
+        WHERE lr.status = 'pending'
+        ORDER BY lr.request_date DESC
+        LIMIT 10
+    ) req;
+
+    -- 5. Combine all data into a single JSON object
+    RETURN jsonb_build_object(
+        'metrics', COALESCE(metrics, '{}'::jsonb),
+        'onboardingList', COALESCE(onboarding_list, '[]'::jsonb),
+        'offboardingList', COALESCE(offboarding_list, '[]'::jsonb),
+        'pendingLeaveRequests', COALESCE(pending_requests, '[]'::jsonb),
+        'lastUpdated', CURRENT_TIMESTAMP
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+
+-- This function retrieves all departments and formats them as a JSON array.
+-- Using JSON is efficient as it returns all data in a single round-trip.
+CREATE OR REPLACE FUNCTION get_all_departments()
+RETURNS jsonb -- Return a single JSON object for easy handling on the client
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(d)
+        FROM (
+            SELECT
+                department_id,
+                department_name,
+                parent_department_id,
+                created_date
+            FROM department
+            ORDER BY department_name ASC
+        ) d
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_all_departments() IS 'Retrieves a complete list of all departments as a JSON array.';
+
+
+
+-- This function retrieves all positions with their associated
+-- department name and position type title for easier display.
+CREATE OR REPLACE FUNCTION get_all_positions_with_details()
+RETURNS jsonb
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(p_details)
+        FROM (
+            SELECT
+                p.position_id,
+                p.department_id,
+                d.department_name,
+                p.position_type_id,
+                pt.title AS position_type_title,
+                p.estimated_from_date,
+                p.estimated_thru_date,
+                p.salary_flag,
+                p.exempt_flag,
+                p.fulltime_flag,
+                p.temporary_flag,
+                p.actual_from_date,
+                p.actual_thru_date,
+                p.created_date
+            FROM position p
+            LEFT JOIN department d ON p.department_id = d.department_id
+            LEFT JOIN position_type pt ON p.position_type_id = pt.position_type_id
+            ORDER BY pt.title, d.department_name
+        ) p_details
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_all_positions_with_details() IS 'Retrieves a complete list of all positions with joined details as a JSON array.';
+
+
+
+-- This function retrieves all position types and formats them as a JSON array.
+CREATE OR REPLACE FUNCTION get_all_position_types()
+RETURNS jsonb
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(pt)
+        FROM (
+            SELECT
+                position_type_id,
+                title,
+                description,
+                benefit_percent,
+                created_date
+            FROM position_type
+            ORDER BY title ASC
+        ) pt
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_all_position_types() IS 'Retrieves a complete list of all position types as a JSON array.';
+
+
+
+
+-- This function retrieves all leave types, including the new policy columns.
+CREATE OR REPLACE FUNCTION get_all_leave_types()
+RETURNS jsonb
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(lt)
+        FROM (
+            SELECT
+                leave_type_id,
+                name,
+                description,
+                is_paid,
+                accrual_rate,
+                max_accrual_hours,
+                carryover_allowed,
+                max_carryover_hours,
+                -- ADDED new columns
+                max_times_usable,
+                usage_period,
+                min_employment_months,
+                gender_restriction,
+                max_days_per_occurrence,
+                requires_documentation,
+                eligibility_criteria,
+                created_date
+            FROM leave_type
+            ORDER BY name ASC
+        ) lt
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_all_leave_types() IS 'Retrieves a complete list of all leave types with detailed policy rules as a JSON array.';
+
+
+-- /database/functions/get_all_positions_for_form.sql
+
+-- This function retrieves all unfilled positions to be used in the 'Add Employee' form.
+-- It joins with 'position_type' to get the title and filters out positions
+-- that have an active fulfillment record (i.e., are currently filled).
+CREATE OR REPLACE FUNCTION get_all_positions_for_form()
+RETURNS jsonb
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(pos)
+        FROM (
+            SELECT
+                p.position_id,
+                p.department_id,
+                pt.title
+            FROM position p
+            JOIN position_type pt ON p.position_type_id = pt.position_type_id
+            -- This subquery ensures we only select positions that are currently open.
+            WHERE p.position_id NOT IN (
+                SELECT pf.position_id FROM position_fulfillment pf WHERE pf.thru_date IS NULL
+            )
+            ORDER BY pt.title
+        ) pos
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_all_positions_for_form() IS 'Retrieves a list of all currently unfilled positions for use in hiring forms.';
+
+
+-- This function handles the complete onboarding process for a new employee.
+-- It creates a party, employee, a new position, and all necessary relationships
+-- within a single transaction to ensure data integrity.
+CREATE OR REPLACE FUNCTION create_employee_with_new_position(
+    p_name_english VARCHAR,
+    p_join_date DATE,
+    p_department_id INT,
+    p_position_type_id INT,
+    p_name_arabic VARCHAR DEFAULT NULL,
+    p_dob DATE DEFAULT NULL,
+    p_gender VARCHAR DEFAULT NULL,
+    p_marital_status VARCHAR DEFAULT NULL,
+    p_nationality VARCHAR DEFAULT NULL,
+    p_mobile_number VARCHAR DEFAULT NULL,
+    p_email VARCHAR DEFAULT NULL,
+    p_emergency_contact_number VARCHAR DEFAULT NULL,
+    p_religion VARCHAR DEFAULT NULL,
+    p_blood_group VARCHAR DEFAULT NULL,
+    p_salary_flag BOOLEAN DEFAULT TRUE,
+    p_created_by VARCHAR DEFAULT 'admin'
+)
+RETURNS jsonb AS $$
+DECLARE
+    new_party_id INT;
+    new_position_id INT;
+    employee_role_id INT;
+    employer_party_id INT;
+    internal_org_role_id INT;
+BEGIN
+    -- For this example, we assume the primary employing organization has party_id = 1
+    -- In a multi-tenant system, this would be dynamically determined.
+    employer_party_id := 1;
+
+    -- 1. Create the Party record for the person
+    INSERT INTO party (created_by) VALUES (p_created_by) RETURNING party_id INTO new_party_id;
+
+    -- 2. Create the Employee record
+    INSERT INTO employee (
+        party_id, name_english, name_arabic, birth_date, gender, marital_status,
+        nationality, mobile_number, email, emergency_contact_number, religion, blood_group, created_by
+    ) VALUES (
+        new_party_id, p_name_english, p_name_arabic, p_dob, p_gender, p_marital_status,
+        p_nationality, p_mobile_number, p_email, p_emergency_contact_number, p_religion, p_blood_group, p_created_by
+    );
+
+    -- 3. Create a new Position for this employee
+    INSERT INTO position (
+        department_id, position_type_id, actual_from_date, salary_flag, fulltime_flag, created_by
+    ) VALUES (
+        p_department_id, p_position_type_id, p_join_date, p_salary_flag, TRUE, p_created_by
+    ) RETURNING position_id INTO new_position_id;
+
+    -- 4. Fulfill the new position with the new employee
+    INSERT INTO position_fulfillment (
+        position_id, employee_party_id, from_date, created_by
+    ) VALUES (
+        new_position_id, new_party_id, p_join_date, p_created_by
+    );
+
+    -- 5. Create Party Roles for the Employee and the Employer
+    INSERT INTO party_role (party_id, role_type, created_by)
+    VALUES (new_party_id, 'Employee', p_created_by)
+    RETURNING party_role_id INTO employee_role_id;
+
+    -- Find the Internal Organization role for the employer
+    SELECT party_role_id INTO internal_org_role_id
+    FROM party_role
+    WHERE party_id = employer_party_id AND role_type = 'Internal Organization'
+    LIMIT 1;
+
+    -- 6. Create the Employment relationship
+    INSERT INTO party_relationship (from_party_role_id, to_party_role_id, from_date, created_by)
+    VALUES (employee_role_id, internal_org_role_id, p_join_date, p_created_by);
+    
+    INSERT INTO employment (from_party_role_id, to_party_role_id, from_date, created_by)
+    VALUES (employee_role_id, internal_org_role_id, p_join_date, p_created_by);
+
+    RETURN jsonb_build_object('status', 'success', 'employee_party_id', new_party_id);
+
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object('status', 'error', 'message', SQLERRM);
+END;
+$$ LANGUAGE plpgsql;

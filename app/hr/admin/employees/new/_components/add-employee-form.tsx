@@ -9,13 +9,12 @@ import { Step1Personal } from "./step-1-personal";
 import { Step2Employment } from "./step-2-employment";
 import { Step3Review } from "./step-3-review";
 import { Button } from "@/components/ui/button";
-
-type Department = { department_id: number; department_name: string };
-type Position = { position_id: number; title: string; department_id: number };
+import type { Department, PositionTypeForForm, Manager } from '../data';
 
 type AddEmployeeFormProps = {
   departments: Department[];
-  positions: Position[];
+  positionTypes: PositionTypeForForm[];
+  managers: Manager[];
 };
 
 export type FormData = {
@@ -32,7 +31,8 @@ export type FormData = {
   religion: string;
   bloodGroup: string;
   departmentId: string;
-  positionId: string;
+  positionTypeId: string;
+  managerId: string; // New manager field
   startDate: Date | undefined;
   employmentType: 'Salaried' | 'Hourly';
   salaryFlag: boolean;
@@ -52,7 +52,8 @@ const initialFormData: FormData = {
   religion: "",
   bloodGroup: "",
   departmentId: "",
-  positionId: "",
+  positionTypeId: "",
+  managerId: "", // New manager field
   startDate: undefined,
   employmentType: 'Salaried',
   salaryFlag: true,
@@ -67,7 +68,7 @@ function SubmitButton() {
   );
 }
 
-export function AddEmployeeForm({ departments, positions }: AddEmployeeFormProps) {
+export function AddEmployeeForm({ departments, positionTypes, managers }: AddEmployeeFormProps) {
   const [step, setStep] = useState(1);
   const [localFormData, setLocalFormData] = useState(initialFormData);
 
@@ -87,8 +88,8 @@ export function AddEmployeeForm({ departments, positions }: AddEmployeeFormProps
 
       <div className="p-8 border rounded-lg bg-neutral-50 border-neutral-200 min-h-[400px]">
         {step === 1 && <Step1Personal formData={localFormData} updateFormData={updateLocalFormData} errors={formState.errors} />}
-        {step === 2 && <Step2Employment formData={localFormData} updateFormData={updateLocalFormData} departments={departments} positions={positions} errors={formState.errors} />}
-        {step === 3 && <Step3Review formData={localFormData} departments={departments} positions={positions} />}
+        {step === 2 && <Step2Employment formData={localFormData} updateFormData={updateLocalFormData} departments={departments} positionTypes={positionTypes} managers={managers} errors={formState.errors} />}
+        {step === 3 && <Step3Review formData={localFormData} departments={departments} positionTypes={positionTypes} managers={managers} />}
       </div>
 
       {formState.message && !formState.errors && (
@@ -97,7 +98,6 @@ export function AddEmployeeForm({ departments, positions }: AddEmployeeFormProps
        {formState.message && formState.errors && (
          <p className="text-sm text-red-500 text-center">Please correct the errors in the form and try again.</p>
       )}
-
 
       <div className="flex justify-between">
         {step > 1 ? (
@@ -111,7 +111,7 @@ export function AddEmployeeForm({ departments, positions }: AddEmployeeFormProps
         )}
       </div>
       
-      {/* Hidden inputs to ensure all data from local state is available to the FormData object in the action */}
+      {/* Hidden inputs to pass all local state to the server action */}
       <input type="hidden" name="nameEnglish" value={localFormData.nameEnglish} />
       <input type="hidden" name="nameArabic" value={localFormData.nameArabic} />
       {localFormData.dob && <input type="hidden" name="dob" value={localFormData.dob.toISOString()} />}
@@ -124,7 +124,8 @@ export function AddEmployeeForm({ departments, positions }: AddEmployeeFormProps
       <input type="hidden" name="religion" value={localFormData.religion} />
       <input type="hidden" name="bloodGroup" value={localFormData.bloodGroup} />
       <input type="hidden" name="departmentId" value={localFormData.departmentId} />
-      <input type="hidden" name="positionId" value={localFormData.positionId} />
+      <input type="hidden" name="positionTypeId" value={localFormData.positionTypeId} />
+      <input type="hidden" name="managerId" value={localFormData.managerId} />
       {localFormData.startDate && <input type="hidden" name="joinDate" value={localFormData.startDate.toISOString()} />}
       <input type="hidden" name="employmentType" value={localFormData.employmentType} />
     </form>

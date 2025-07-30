@@ -5,7 +5,6 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
-// Define a schema for validation using Zod
 const EmployeeSchema = z.object({
   nameEnglish: z.string().min(3, { message: "English name must be at least 3 characters." }),
   nameArabic: z.string().optional(),
@@ -18,8 +17,10 @@ const EmployeeSchema = z.object({
   emergencyContactNumber: z.string().optional(),
   religion: z.string().optional(),
   bloodGroup: z.string().optional(),
-  positionId: z.string().min(1, { message: "Position is required." }),
-  joinDate: z.coerce.date(), // <-- CORRECTED
+  departmentId: z.string().min(1, { message: "Department is required."}),
+  positionTypeId: z.string().min(1, { message: "Position Type is required." }),
+  managerId: z.string().optional(), // New optional manager field
+  joinDate: z.coerce.date(),
   salaryFlag: z.boolean(),
 });
 
@@ -33,7 +34,6 @@ export type FormState = {
 export async function createEmployee(prevState: FormState, formData: FormData): Promise<FormState> {
   const supabase = await createClient();
 
-  // Extract and validate data from FormData
   const validatedFields = EmployeeSchema.safeParse({
     nameEnglish: formData.get('nameEnglish'),
     nameArabic: formData.get('nameArabic'),
@@ -46,22 +46,26 @@ export async function createEmployee(prevState: FormState, formData: FormData): 
     emergencyContactNumber: formData.get('emergencyContactNumber'),
     religion: formData.get('religion'),
     bloodGroup: formData.get('bloodGroup'),
-    positionId: formData.get('positionId'),
+    departmentId: formData.get('departmentId'),
+    positionTypeId: formData.get('positionTypeId'),
+    managerId: formData.get('managerId'),
     joinDate: formData.get('joinDate'),
     salaryFlag: formData.get('employmentType') === 'Salaried',
   });
 
   if (!validatedFields.success) {
-    console.log(validatedFields.error.flatten().fieldErrors);
     return {
       message: "Validation failed. Please check the fields below.",
       errors: validatedFields.error.flatten().fieldErrors,
     };
   }
 
-  // Call the database RPC function with validated data
-  const { data, error } = await supabase.rpc('create_new_employee', {
+  const { data, error } = await supabase.rpc('create_employee_with_new_position', {
     p_name_english: validatedFields.data.nameEnglish,
+    p_join_date: validatedFields.data.joinDate.toISOString(),
+    p_department_id: parseInt(validatedFields.data.departmentId),
+    p_position_type_id: parseInt(validatedFields.data.positionTypeId),
+    p_manager_party_id: validatedFields.data.managerId ? parseInt(validatedFields.data.managerId) : null,
     p_name_arabic: validatedFields.data.nameArabic,
     p_dob: validatedFields.data.dob?.toISOString(),
     p_gender: validatedFields.data.gender,
@@ -72,16 +76,13 @@ export async function createEmployee(prevState: FormState, formData: FormData): 
     p_emergency_contact_number: validatedFields.data.emergencyContactNumber,
     p_religion: validatedFields.data.religion,
     p_blood_group: validatedFields.data.bloodGroup,
-    p_position_id: parseInt(validatedFields.data.positionId),
-    p_join_date: validatedFields.data.joinDate.toISOString(),
     p_salary_flag: validatedFields.data.salaryFlag,
   });
 
   if (error || data?.status === 'error') {
     console.error('Database Error:', error || data?.message);
-    return { message: `Database Error: Failed to create employee profile.` };
+    return { message: `Database Error: Failed to create employee. ${data?.message || ''}` };
   }
 
-  // On success, redirect to a relevant page
   redirect('/hr/admin');
 }

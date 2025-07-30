@@ -1,0 +1,363 @@
+create table employment (
+  from_party_role_id serial not null primary key,
+  to_party_role_id serial not null primary key,
+  from_date date default now() not null primary key,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table leave_type (
+  leave_type_id serial not null primary key,
+  name character not null,
+  description text,
+  is_paid boolean,
+  accrual_rate numeric,
+  max_accrual_hours numeric,
+  carryover_allowed boolean,
+  max_carryover_hours numeric,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character,
+  max_times_usable integer,
+  usage_period character,
+  min_employment_months integer,
+  gender_restriction character,
+  max_days_per_occurrence integer,
+  requires_documentation boolean,
+  eligibility_criteria text
+);
+
+create table salary_component_type (
+  component_type_id serial not null primary key,
+  name character not null,
+  description text,
+  is_taxable boolean,
+  is_basic_salary boolean,
+  display_order integer,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character,
+  main_account_code character,
+  dimension_1 character,
+  dimension_2 character,
+  dimension_3 character,
+  dimension_4 character,
+  dimension_5 character
+);
+
+create table party (
+  party_id serial not null primary key,
+  credit_rating character,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table department (
+  department_id serial not null primary key,
+  department_name character not null,
+  parent_department_id integer references department (department_id),
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table employee (
+  party_id serial references party (party_id) primary key,
+  gender character,
+  birth_date date default now(),
+  marital_status character,
+  name_english character not null,
+  name_arabic character,
+  nationality character,
+  mobile_number character not null,
+  email character,
+  emergency_contact_number character,
+  religion character,
+  blood_group character,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character,
+  manager_party_id integer references employee (party_id)
+);
+
+create table termination_reason (
+  term_reason_id serial not null primary key,
+  description character not null,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table position_type (
+  position_type_id serial not null primary key,
+  description text,
+  title character,
+  benefit_percent numeric,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table leave_request (
+  leave_request_id serial not null primary key,
+  employee_party_id integer references employee (party_id),
+  leave_type_id integer references leave_type (leave_type_id),
+  request_date date default now() not null,
+  start_date date default now() not null,
+  end_date date default now() not null,
+  hours_requested numeric not null,
+  status character not null,
+  reason text,
+  approved_by_party_id integer references employee (party_id),
+  approval_date date default now(),
+  approval_comments text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table leave_balance (
+  employee_party_id serial references employee (party_id) primary key,
+  leave_type_id serial references leave_type (leave_type_id) primary key,
+  balance_date date default now() not null primary key,
+  hours_available numeric not null,
+  hours_pending numeric not null,
+  hours_used_ytd numeric not null,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table leave_transaction (
+  leave_transaction_id serial not null primary key,
+  employee_party_id integer references employee (party_id),
+  leave_type_id integer references leave_type (leave_type_id),
+  leave_request_id integer references leave_request (leave_request_id),
+  transaction_date date default now() not null,
+  hours_used numeric not null,
+  transaction_type character not null,
+  description text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table organization (
+  party_id serial references party (party_id) primary key,
+  name character,
+  federal_tax_id_num character,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table unemployment_claim (
+  unemployment_claim_id serial not null primary key,
+  from_party_role_id integer,
+  to_party_role_id integer,
+  employment_from_date date default now(),
+  unemployment_claim_date date default now(),
+  description text,
+  status character,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table position (
+  position_id serial not null primary key,
+  department_id integer references department (department_id),
+  position_type_id integer references position_type (position_type_id),
+  estimated_from_date date default now(),
+  estimated_thru_date date default now(),
+  salary_flag boolean,
+  exempt_flag boolean,
+  fulltime_flag boolean,
+  temporary_flag boolean,
+  actual_from_date date default now(),
+  actual_thru_date date default now(),
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table party_role (
+  party_role_id serial not null primary key,
+  party_id integer references party (party_id),
+  role_type character,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table position_fulfillment (
+  position_id serial references position (position_id) primary key,
+  employee_party_id serial references employee (party_id) primary key,
+  from_date date default now() not null primary key,
+  thru_date date default now(),
+  comment text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table employment_application (
+  application_id serial not null primary key,
+  applicant_party_id integer references party (party_id),
+  position_id integer references position (position_id),
+  application_date date default now(),
+  status character,
+  source character,
+  referred_by_party_id integer references party (party_id),
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table party_relationship (
+  from_party_role_id serial references party_role (party_role_id) primary key,
+  to_party_role_id serial references party_role (party_role_id) primary key,
+  from_date date default now() not null primary key,
+  thru_date date default now(),
+  comment text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table performance_review (
+  perf_review_id serial not null primary key,
+  receiver_party_role_id integer references party_role (party_role_id),
+  manager_party_role_id integer references party_role (party_role_id),
+  from_date date default now(),
+  thru_date date default now(),
+  comments text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table compensation (
+  compensation_id serial not null primary key,
+  employee_party_id integer references employee (party_id),
+  position_id integer references position (position_id),
+  compensation_type character not null,
+  amount numeric not null,
+  currency character,
+  pay_frequency character,
+  from_date date default now() not null,
+  thru_date date default now(),
+  reason character,
+  comment text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character,
+  total_amount numeric,
+  is_active boolean
+);
+
+create table responsibility_type (
+  responsibility_type_id serial not null primary key,
+  description text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table compensation_component (
+  compensation_component_id serial not null primary key,
+  compensation_id integer references compensation (compensation_id),
+  component_type_id integer references salary_component_type (component_type_id),
+  amount numeric not null,
+  percentage_of_basic numeric,
+  is_fixed boolean,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character,
+  main_account_code character,
+  dimension_1 character,
+  dimension_2 character,
+  dimension_3 character,
+  dimension_4 character,
+  dimension_5 character
+);
+
+create table termination_type (
+  termination_type_id serial not null primary key,
+  description character not null,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table position_responsibility (
+  position_id serial references position (position_id) primary key,
+  responsibility_type_id serial references responsibility_type (responsibility_type_id) primary key,
+  from_date date default now() not null primary key,
+  thru_date date default now(),
+  comment text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table position_reporting_structure (
+  position_id_reports_to serial references position (position_id) primary key,
+  position_id_reporting serial references position (position_id) primary key,
+  from_date date default now() not null primary key,
+  thru_date date default now(),
+  primary_flag boolean,
+  comment text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table skill_type (
+  skill_type_id serial not null primary key,
+  description text,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+
+create table party_skill (
+  party_id serial references party (party_id) primary key,
+  skill_type_id serial references skill_type (skill_type_id) primary key,
+  started_using_date date default now(),
+  years_experience integer,
+  skill_level character,
+  created_date timestamp default now(),
+  modified_date timestamp default now(),
+  created_by character,
+  modified_by character
+);
+

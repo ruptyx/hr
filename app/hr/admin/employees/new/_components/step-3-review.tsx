@@ -1,14 +1,13 @@
 // /app/hr/admin/employees/new/_components/step-3-review.tsx
 import type { FormData } from "./add-employee-form";
+import type { Department, PositionTypeForForm, Manager } from '../data';
 import { format } from "date-fns";
-
-type Department = { department_id: number; department_name: string };
-type Position = { position_id: number; title: string; department_id: number };
 
 type StepProps = {
   formData: FormData;
   departments: Department[];
-  positions: Position[];
+  positionTypes: PositionTypeForForm[];
+  managers: Manager[];
 };
 
 function ReviewItem({ label, value, isRtl = false }: { label: string; value?: string | null, isRtl?: boolean }) {
@@ -20,9 +19,10 @@ function ReviewItem({ label, value, isRtl = false }: { label: string; value?: st
     )
 }
 
-export function Step3Review({ formData, departments, positions }: StepProps) {
+export function Step3Review({ formData, departments, positionTypes, managers }: StepProps) {
     const departmentName = departments.find(d => d.department_id.toString() === formData.departmentId)?.department_name;
-    const positionTitle = positions.find(p => p.position_id.toString() === formData.positionId)?.title;
+    const positionTitle = positionTypes.find(p => p.position_type_id.toString() === formData.positionTypeId)?.title;
+    const managerName = managers.find(m => m.party_id.toString() === formData.managerId)?.name_english;
 
   return (
     <div className="space-y-6">
@@ -35,16 +35,19 @@ export function Step3Review({ formData, departments, positions }: StepProps) {
             <dl className="space-y-0">
                 <ReviewItem label="Name (English)" value={formData.nameEnglish} />
                 <ReviewItem label="Name (Arabic)" value={formData.nameArabic} isRtl={true} />
-                {/* ... other personal info review items ... */}
-                 <ReviewItem label="Email ID" value={formData.email} />
+                <ReviewItem label="Date of Birth" value={formData.dob ? format(formData.dob, "PPP") : 'N/A'} />
+                <ReviewItem label="Gender" value={formData.gender} />
+                <ReviewItem label="Nationality" value={formData.nationality} />
+                <ReviewItem label="Mobile Number" value={`${formData.mobileDialCode} ${formData.mobileNumber}`} />
+                <ReviewItem label="Email ID" value={formData.email} />
             </dl>
         </div>
         <div>
             <h3 className="text-lg font-semibold mb-2">Employment Details</h3>
              <dl className="space-y-0">
                 <ReviewItem label="Department" value={departmentName} />
-                <ReviewItem label="Position / Title" value={positionTitle} />
-                {/* Label updated for clarity */}
+                <ReviewItem label="Position Type" value={positionTitle} />
+                <ReviewItem label="Reports To" value={managerName} />
                 <ReviewItem label="Company Join Date" value={formData.startDate ? format(formData.startDate, "PPP") : 'N/A'} />
                 <ReviewItem label="Employment Type" value={formData.employmentType} />
             </dl>
