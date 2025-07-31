@@ -1,4 +1,3 @@
-// /app/hr/admin/employees/new/_components/add-employee-form.tsx
 'use client';
 
 import { useState } from "react";
@@ -10,6 +9,7 @@ import { Step2Employment } from "./step-2-employment";
 import { Step3Review } from "./step-3-review";
 import { Button } from "@/components/ui/button";
 import type { Department, PositionTypeForForm, Manager } from '../data';
+import { format } from 'date-fns';
 
 type AddEmployeeFormProps = {
   departments: Department[];
@@ -114,7 +114,7 @@ export function AddEmployeeForm({ departments, positionTypes, managers }: AddEmp
       {/* Hidden inputs to pass all local state to the server action */}
       <input type="hidden" name="nameEnglish" value={localFormData.nameEnglish} />
       <input type="hidden" name="nameArabic" value={localFormData.nameArabic} />
-      {localFormData.dob && <input type="hidden" name="dob" value={localFormData.dob.toISOString()} />}
+      {localFormData.dob && <input type="hidden" name="dob" value={format(localFormData.dob, "yyyy-MM-dd")} />}
       <input type="hidden" name="gender" value={localFormData.gender} />
       <input type="hidden" name="maritalStatus" value={localFormData.maritalStatus} />
       <input type="hidden" name="nationality" value={localFormData.nationality} />
@@ -126,7 +126,7 @@ export function AddEmployeeForm({ departments, positionTypes, managers }: AddEmp
       <input type="hidden" name="departmentId" value={localFormData.departmentId} />
       <input type="hidden" name="positionTypeId" value={localFormData.positionTypeId} />
       <input type="hidden" name="managerId" value={localFormData.managerId} />
-      {localFormData.startDate && <input type="hidden" name="joinDate" value={localFormData.startDate.toISOString()} />}
+      {localFormData.startDate && <input type="hidden" name="joinDate" value={format(localFormData.startDate, "yyyy-MM-dd")} />}
       <input type="hidden" name="employmentType" value={localFormData.employmentType} />
     </form>
   );

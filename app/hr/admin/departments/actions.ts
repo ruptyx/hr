@@ -3,21 +3,28 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import { departmentSchema } from "./schemas";
 
 export async function addDepartment(formData: FormData) {
   const supabase = await createClient();
-  const departmentName = formData.get("department_name") as string;
-  const parentDepartmentId = formData.get("parent_department_id") as string;
 
-  if (!departmentName) {
-    return { error: "Department name is required." };
+  const validatedFields = departmentSchema.safeParse({
+    department_name: formData.get("department_name"),
+    parent_department_id: formData.get("parent_department_id"),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: validatedFields.error.flatten().fieldErrors,
+    };
   }
 
+  const { department_name, parent_department_id } = validatedFields.data;
+
   const { error } = await supabase.from("department").insert({
-    department_name: departmentName,
-    // Supabase handles empty string as null for integer fields
-    parent_department_id: parentDepartmentId ? parseInt(parentDepartmentId) : null, 
-    created_by: 'admin' // Placeholder, replace with actual user logic
+    department_name,
+    parent_department_id: parent_department_id,
+    created_by: "admin", // Placeholder, replace with actual user logic
   });
 
   if (error) {
@@ -29,31 +36,40 @@ export async function addDepartment(formData: FormData) {
   return { success: "Department added successfully." };
 }
 
-export async function updateDepartment(departmentId: number, formData: FormData) {
-    const supabase = await createClient();
-    const departmentName = formData.get("department_name") as string;
-    const parentDepartmentId = formData.get("parent_department_id") as string;
+export async function updateDepartment(
+  departmentId: number,
+  formData: FormData
+) {
+  const supabase = await createClient();
+  const validatedFields = departmentSchema.safeParse({
+    department_name: formData.get("department_name"),
+    parent_department_id: formData.get("parent_department_id"),
+  });
 
-    if (!departmentName) {
-        return { error: "Department name is required." };
-    }
+  if (!validatedFields.success) {
+    return {
+      error: validatedFields.error.flatten().fieldErrors,
+    };
+  }
 
-    const { error } = await supabase
-        .from("department")
-        .update({
-            department_name: departmentName,
-            parent_department_id: parentDepartmentId ? parseInt(parentDepartmentId) : null,
-            modified_by: 'admin' // Placeholder
-        })
-        .eq("department_id", departmentId);
+  const { department_name, parent_department_id } = validatedFields.data;
 
-    if (error) {
-        console.error("Error updating department:", error);
-        return { error: "Failed to update department. " + error.message };
-    }
+  const { error } = await supabase
+    .from("department")
+    .update({
+      department_name,
+      parent_department_id: parent_department_id,
+      modified_by: "admin", // Placeholder
+    })
+    .eq("department_id", departmentId);
 
-    revalidatePath("/hr/admin/departments");
-    return { success: "Department updated successfully." };
+  if (error) {
+    console.error("Error updating department:", error);
+    return { error: "Failed to update department. " + error.message };
+  }
+
+  revalidatePath("/hr/admin/departments");
+  return { success: "Department updated successfully." };
 }
 
 

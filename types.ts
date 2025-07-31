@@ -1,22 +1,22 @@
-interface Employment {
-  from_party_role_id: number   /* primary key */;
-  to_party_role_id: number   /* primary key */;
-  from_date: string   /* primary key */;
+export type Employment = {
+  from_party_role_id: number;
+  to_party_role_id: number;
+  from_date: string;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
 };
 
-interface Leave_type {
-  leave_type_id: number   /* primary key */;
+export type LeaveType = {
+  leave_type_id: number;
   name: string;
   description?: string;
   is_paid?: boolean;
-  accrual_rate?: any // type unknown;
-  max_accrual_hours?: any // type unknown;
+  accrual_rate?: number;
+  max_accrual_hours?: number;
   carryover_allowed?: boolean;
-  max_carryover_hours?: any // type unknown;
+  max_carryover_hours?: number;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
@@ -30,8 +30,8 @@ interface Leave_type {
   eligibility_criteria?: string;
 };
 
-interface Salary_component_type {
-  component_type_id: number   /* primary key */;
+export type SalaryComponentType = {
+  component_type_id: number;
   name: string;
   description?: string;
   is_taxable?: boolean;
@@ -49,8 +49,8 @@ interface Salary_component_type {
   dimension_5?: string;
 };
 
-interface Party {
-  party_id: number   /* primary key */;
+export type Party = {
+  party_id: number;
   credit_rating?: string;
   created_date?: string;
   modified_date?: string;
@@ -58,10 +58,10 @@ interface Party {
   modified_by?: string;
 };
 
-interface Department {
-  department_id: number   /* primary key */;
+export type Department = {
+  department_id: number;
   department_name: string;
-  parent_department_id?: number   /* foreign key to department.department_id */;
+  parent_department_id?: number;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
@@ -69,8 +69,8 @@ interface Department {
   department?: Department;
 };
 
-interface Employee {
-  party_id: number   /* primary key */   /* foreign key to party.party_id */;
+export type Employee = {
+  party_id: number;
   gender?: string;
   birth_date?: string;
   marital_status?: string;
@@ -86,13 +86,13 @@ interface Employee {
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
-  manager_party_id?: number   /* foreign key to employee.party_id */;
+  manager_party_id?: number;
   party?: Party;
-  employee?: Employee;
+  manager?: Employee;
 };
 
-interface Termination_reason {
-  term_reason_id: number   /* primary key */;
+export type TerminationReason = {
+  term_reason_id: number;
   description: string;
   created_date?: string;
   modified_date?: string;
@@ -100,28 +100,28 @@ interface Termination_reason {
   modified_by?: string;
 };
 
-interface Position_type {
-  position_type_id: number   /* primary key */;
+export type PositionType = {
+  position_type_id: number;
   description?: string;
   title?: string;
-  benefit_percent?: any // type unknown;
+  benefit_percent?: number;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
 };
 
-interface Leave_request {
-  leave_request_id: number   /* primary key */;
-  employee_party_id: number   /* foreign key to employee.party_id */;
-  leave_type_id: number   /* foreign key to leave_type.leave_type_id */;
+export type LeaveRequest = {
+  leave_request_id: number;
+  employee_party_id: number;
+  leave_type_id: number;
   request_date: string;
   start_date: string;
   end_date: string;
-  hours_requested: any // type unknown;
+  hours_requested: number;
   status: string;
   reason?: string;
-  approved_by_party_id?: number   /* foreign key to employee.party_id */;
+  approved_by_party_id?: number;
   approval_date?: string;
   approval_comments?: string;
   created_date?: string;
@@ -129,32 +129,31 @@ interface Leave_request {
   created_by?: string;
   modified_by?: string;
   employee?: Employee;
-  leave_type?: Leave_type;
-  employee?: Employee;
+  leave_type?: LeaveType;
 };
 
-interface Leave_balance {
-  employee_party_id: number   /* primary key */   /* foreign key to employee.party_id */;
-  leave_type_id: number   /* primary key */   /* foreign key to leave_type.leave_type_id */;
-  balance_date: string   /* primary key */;
-  hours_available: any // type unknown;
-  hours_pending: any // type unknown;
-  hours_used_ytd: any // type unknown;
+export type LeaveBalance = {
+  employee_party_id: number;
+  leave_type_id: number;
+  balance_date: string;
+  hours_available: number;
+  hours_pending: number;
+  hours_used_ytd: number;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
   employee?: Employee;
-  leave_type?: Leave_type;
+  leave_type?: LeaveType;
 };
 
-interface Leave_transaction {
-  leave_transaction_id: number   /* primary key */;
-  employee_party_id: number   /* foreign key to employee.party_id */;
-  leave_type_id: number   /* foreign key to leave_type.leave_type_id */;
-  leave_request_id?: number   /* foreign key to leave_request.leave_request_id */;
+export type LeaveTransaction = {
+  leave_transaction_id: number;
+  employee_party_id: number;
+  leave_type_id: number;
+  leave_request_id?: number;
   transaction_date: string;
-  hours_used: any // type unknown;
+  hours_used: number;
   transaction_type: string;
   description?: string;
   created_date?: string;
@@ -162,12 +161,12 @@ interface Leave_transaction {
   created_by?: string;
   modified_by?: string;
   employee?: Employee;
-  leave_type?: Leave_type;
-  leave_request?: Leave_request;
+  leave_type?: LeaveType;
+  leave_request?: LeaveRequest;
 };
 
-interface Organization {
-  party_id: number   /* primary key */   /* foreign key to party.party_id */;
+export type Organization = {
+  party_id: number;
   name?: string;
   federal_tax_id_num?: string;
   created_date?: string;
@@ -177,8 +176,8 @@ interface Organization {
   party?: Party;
 };
 
-interface Unemployment_claim {
-  unemployment_claim_id: number   /* primary key */;
+export type UnemploymentClaim = {
+  unemployment_claim_id: number;
   from_party_role_id?: number;
   to_party_role_id?: number;
   employment_from_date?: string;
@@ -191,10 +190,10 @@ interface Unemployment_claim {
   modified_by?: string;
 };
 
-interface Position {
-  position_id: number   /* primary key */;
-  department_id?: number   /* foreign key to department.department_id */;
-  position_type_id?: number   /* foreign key to position_type.position_type_id */;
+export type Position = {
+  position_id: number;
+  department_id?: number;
+  position_type_id?: number;
   estimated_from_date?: string;
   estimated_thru_date?: string;
   salary_flag?: boolean;
@@ -208,12 +207,12 @@ interface Position {
   created_by?: string;
   modified_by?: string;
   department?: Department;
-  position_type?: Position_type;
+  position_type?: PositionType;
 };
 
-interface Party_role {
-  party_role_id: number   /* primary key */;
-  party_id: number   /* foreign key to party.party_id */;
+export type PartyRole = {
+  party_role_id: number;
+  party_id: number;
   role_type?: string;
   created_date?: string;
   modified_date?: string;
@@ -222,10 +221,10 @@ interface Party_role {
   party?: Party;
 };
 
-interface Position_fulfillment {
-  position_id: number   /* primary key */   /* foreign key to position.position_id */;
-  employee_party_id: number   /* primary key */   /* foreign key to employee.party_id */;
-  from_date: string   /* primary key */;
+export type PositionFulfillment = {
+  position_id: number;
+  employee_party_id: number;
+  from_date: string;
   thru_date?: string;
   comment?: string;
   created_date?: string;
@@ -236,41 +235,41 @@ interface Position_fulfillment {
   employee?: Employee;
 };
 
-interface Employment_application {
-  application_id: number   /* primary key */;
-  applicant_party_id: number   /* foreign key to party.party_id */;
-  position_id?: number   /* foreign key to position.position_id */;
+export type EmploymentApplication = {
+  application_id: number;
+  applicant_party_id: number;
+  position_id?: number;
   application_date?: string;
   status?: string;
   source?: string;
-  referred_by_party_id?: number   /* foreign key to party.party_id */;
+  referred_by_party_id?: number;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
-  party?: Party;
+  applicant?: Party;
   position?: Position;
-  party?: Party;
+  referred_by?: Party;
 };
 
-interface Party_relationship {
-  from_party_role_id: number   /* primary key */   /* foreign key to party_role.party_role_id */;
-  to_party_role_id: number   /* primary key */   /* foreign key to party_role.party_role_id */;
-  from_date: string   /* primary key */;
+export type PartyRelationship = {
+  from_party_role_id: number;
+  to_party_role_id: number;
+  from_date: string;
   thru_date?: string;
   comment?: string;
   created_date?: string;
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
-  party_role?: Party_role;
-  party_role?: Party_role;
+  from_party_role?: PartyRole;
+  to_party_role?: PartyRole;
 };
 
-interface Performance_review {
-  perf_review_id: number   /* primary key */;
-  receiver_party_role_id: number   /* foreign key to party_role.party_role_id */;
-  manager_party_role_id: number   /* foreign key to party_role.party_role_id */;
+export type PerformanceReview = {
+  perf_review_id: number;
+  receiver_party_role_id: number;
+  manager_party_role_id: number;
   from_date?: string;
   thru_date?: string;
   comments?: string;
@@ -278,16 +277,16 @@ interface Performance_review {
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
-  party_role?: Party_role;
-  party_role?: Party_role;
+  receiver_party_role?: PartyRole;
+  manager_party_role?: PartyRole;
 };
 
-interface Compensation {
-  compensation_id: number   /* primary key */;
-  employee_party_id: number   /* foreign key to employee.party_id */;
-  position_id?: number   /* foreign key to position.position_id */;
+export type Compensation = {
+  compensation_id: number;
+  employee_party_id: number;
+  position_id?: number;
   compensation_type: string;
-  amount: any // type unknown;
+  amount: number;
   currency?: string;
   pay_frequency?: string;
   from_date: string;
@@ -298,14 +297,14 @@ interface Compensation {
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
-  total_amount?: any // type unknown;
+  total_amount?: number;
   is_active?: boolean;
   employee?: Employee;
   position?: Position;
 };
 
-interface Responsibility_type {
-  responsibility_type_id: number   /* primary key */;
+export type ResponsibilityType = {
+  responsibility_type_id: number;
   description?: string;
   created_date?: string;
   modified_date?: string;
@@ -313,12 +312,12 @@ interface Responsibility_type {
   modified_by?: string;
 };
 
-interface Compensation_component {
-  compensation_component_id: number   /* primary key */;
-  compensation_id: number   /* foreign key to compensation.compensation_id */;
-  component_type_id: number   /* foreign key to salary_component_type.component_type_id */;
-  amount: any // type unknown;
-  percentage_of_basic?: any // type unknown;
+export type CompensationComponent = {
+  compensation_component_id: number;
+  compensation_id: number;
+  component_type_id: number;
+  amount: number;
+  percentage_of_basic?: number;
   is_fixed?: boolean;
   created_date?: string;
   modified_date?: string;
@@ -331,11 +330,11 @@ interface Compensation_component {
   dimension_4?: string;
   dimension_5?: string;
   compensation?: Compensation;
-  salary_component_type?: Salary_component_type;
+  salary_component_type?: SalaryComponentType;
 };
 
-interface Termination_type {
-  termination_type_id: number   /* primary key */;
+export type TerminationType = {
+  termination_type_id: number;
   description: string;
   created_date?: string;
   modified_date?: string;
@@ -343,10 +342,10 @@ interface Termination_type {
   modified_by?: string;
 };
 
-interface Position_responsibility {
-  position_id: number   /* primary key */   /* foreign key to position.position_id */;
-  responsibility_type_id: number   /* primary key */   /* foreign key to responsibility_type.responsibility_type_id */;
-  from_date: string   /* primary key */;
+export type PositionResponsibility = {
+  position_id: number;
+  responsibility_type_id: number;
+  from_date: string;
   thru_date?: string;
   comment?: string;
   created_date?: string;
@@ -354,13 +353,13 @@ interface Position_responsibility {
   created_by?: string;
   modified_by?: string;
   position?: Position;
-  responsibility_type?: Responsibility_type;
+  responsibility_type?: ResponsibilityType;
 };
 
-interface Position_reporting_structure {
-  position_id_reports_to: number   /* primary key */   /* foreign key to position.position_id */;
-  position_id_reporting: number   /* primary key */   /* foreign key to position.position_id */;
-  from_date: string   /* primary key */;
+export type PositionReportingStructure = {
+  position_id_reports_to: number;
+  position_id_reporting: number;
+  from_date: string;
   thru_date?: string;
   primary_flag?: boolean;
   comment?: string;
@@ -368,12 +367,12 @@ interface Position_reporting_structure {
   modified_date?: string;
   created_by?: string;
   modified_by?: string;
-  position?: Position;
-  position?: Position;
+  reports_to_position?: Position;
+  reporting_position?: Position;
 };
 
-interface Skill_type {
-  skill_type_id: number   /* primary key */;
+export type SkillType = {
+  skill_type_id: number;
   description?: string;
   created_date?: string;
   modified_date?: string;
@@ -381,9 +380,9 @@ interface Skill_type {
   modified_by?: string;
 };
 
-interface Party_skill {
-  party_id: number   /* primary key */   /* foreign key to party.party_id */;
-  skill_type_id: number   /* primary key */   /* foreign key to skill_type.skill_type_id */;
+export type PartySkill = {
+  party_id: number;
+  skill_type_id: number;
   started_using_date?: string;
   years_experience?: number;
   skill_level?: string;
@@ -392,6 +391,6 @@ interface Party_skill {
   created_by?: string;
   modified_by?: string;
   party?: Party;
-  skill_type?: Skill_type;
+  skill_type?: SkillType;
 };
 
