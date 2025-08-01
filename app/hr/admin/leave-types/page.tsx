@@ -1,5 +1,6 @@
 // /app/hr/admin/leave-types/page.tsx
 
+import { BackButton } from "@/components/shared/back-button";
 import { getLeaveTypes } from "./data";
 import { LeaveTypesClientPage } from "./_components/leave-types-client-page";
 
@@ -7,7 +8,10 @@ export default async function ManageLeaveTypesPage() {
   const leaveTypes = await getLeaveTypes();
 
   return (
-    <div className="p-4 md:p-8 bg-white text-black">
+    <div className="p-4 md:p-8">
+      <div className="mb-4">
+        <BackButton />
+      </div>
       <LeaveTypesClientPage leaveTypes={leaveTypes} />
     </div>
   );

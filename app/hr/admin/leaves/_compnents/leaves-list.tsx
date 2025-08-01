@@ -43,8 +43,11 @@ export function LeavesList({ leaveRequests }: LeavesListProps) {
               <TableRow key={request.leave_request_id}>
                 <TableCell className="font-medium">{request.employee_name}</TableCell>
                 <TableCell>{request.leave_type_name}</TableCell>
-                <TableCell>{new Date(request.start_date).toLocaleDateString()}</TableCell>
-                <TableCell>{new Date(request.end_date).toLocaleDateString()}</TableCell>
+                import { format } from "date-fns";
+// ... (imports)
+                <TableCell>{format(new Date(request.start_date), "yyyy-MM-dd")}</TableCell>
+                <TableCell>{format(new Date(request.end_date), "yyyy-MM-dd")}</TableCell>
+// ... (rest of the file)
                 <TableCell className="text-center">{request.hours_requested}</TableCell>
                 <TableCell className="text-right">
                     <Badge variant={statusVariantMap[request.status] || 'outline'}>

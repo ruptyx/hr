@@ -1,4 +1,5 @@
 // /app/hr/admin/employees/[id]/page.tsx
+import { BackButton } from "@/components/shared/back-button";
 import { getEmployeeById, getPotentialManagers, getSalaryComponentTypes, getEmployeeCompensation } from '../../employees/data';
 import { EditEmployeeForm } from './_components/edit-employee-form';
 import { notFound } from 'next/navigation';
@@ -23,6 +24,9 @@ export default async function EditEmployeePage({ params }: { params: { id: strin
 
   return (
     <div className="p-4 md:p-8">
+      <div className="mb-4">
+        <BackButton />
+      </div>
       <div className="max-w-4xl mx-auto">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Edit Employee</h1>

@@ -1,5 +1,6 @@
 // /app/hr/admin/employees/new/page.tsx
 
+import { BackButton } from "@/components/shared/back-button";
 import { AddEmployeeForm } from "./_components/add-employee-form";
 // Import all necessary data fetching functions
 import { getDepartmentsForForm, getPositionTypesForForm, getEmployeesForManagerDropdown } from "./data";
@@ -13,7 +14,10 @@ export default async function AddNewEmployeePage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-8 p-4 md:p-8 bg-white text-black">
+    <div className="flex flex-col gap-8 p-4 md:p-8">
+      <div className="mb-4">
+        <BackButton />
+      </div>
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Add New Employee</h1>
         <p className="text-neutral-500">
