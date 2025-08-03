@@ -3,15 +3,23 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { departmentSchema } from "./schemas";
+import { departmentSchema, deleteDepartmentSchema } from "./schemas";
+import { departmentHasChildren } from "./data";
 
 export async function addDepartment(formData: FormData) {
   const supabase = await createClient();
 
-  const validatedFields = departmentSchema.safeParse({
-    department_name: formData.get("department_name"),
-    parent_department_id: formData.get("parent_department_id"),
-  });
+  const rawData: any = {
+    name: formData.get("name"),
+  };
+
+  // Only include parent_department_id if it was provided
+  const parentId = formData.get("parent_department_id");
+  if (parentId) {
+    rawData.parent_department_id = parentId;
+  }
+
+  const validatedFields = departmentSchema.safeParse(rawData);
 
   if (!validatedFields.success) {
     return {
@@ -19,17 +27,28 @@ export async function addDepartment(formData: FormData) {
     };
   }
 
-  const { department_name, parent_department_id } = validatedFields.data;
+  const { name, parent_department_id } = validatedFields.data;
 
-  const { error } = await supabase.from("department").insert({
-    department_name,
-    parent_department_id: parent_department_id,
-    created_by: "admin", // Placeholder, replace with actual user logic
+  // Validate parent department exists if provided
+  if (parent_department_id) {
+    const { data: parentExists } = await supabase
+      .from("departments")
+      .select("id")
+      .eq("id", parent_department_id)
+      .single();
+
+    if (!parentExists) {
+      return { error: "Selected parent department does not exist." };
+    }
+  }
+
+  const { error } = await supabase.from("departments").insert({
+    name,
+    parent_department_id: parent_department_id || null,
   });
 
   if (error) {
-    console.error("Error adding department:", error);
-    return { error: "Failed to add department. " + error.message };
+    return { error: "Failed to add department: " + error.message };
   }
 
   revalidatePath("/hr/admin/departments");
@@ -37,59 +56,129 @@ export async function addDepartment(formData: FormData) {
 }
 
 export async function updateDepartment(
-  departmentId: number,
+  departmentId: string,
   formData: FormData
 ) {
   const supabase = await createClient();
-  const validatedFields = departmentSchema.safeParse({
-    department_name: formData.get("department_name"),
-    parent_department_id: formData.get("parent_department_id"),
-  });
 
-  if (!validatedFields.success) {
-    return {
-      error: validatedFields.error.flatten().fieldErrors,
-    };
+  // Validate department ID
+  const idValidation = deleteDepartmentSchema.safeParse({ id: departmentId });
+  if (!idValidation.success) {
+    return { error: "Invalid department ID." };
   }
 
-  const { department_name, parent_department_id } = validatedFields.data;
+  const rawData: any = {
+    name: formData.get("name"),
+  };
+
+  // Only include parent_department_id if it was provided
+  const parentId = formData.get("parent_department_id");
+  if (parentId) {
+    rawData.parent_department_id = parentId;
+  }
+
+  const validatedFields = departmentSchema.safeParse(rawData);
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { name, parent_department_id } = validatedFields.data;
+
+  // Prevent setting self as parent or creating circular references
+  if (parent_department_id === departmentId) {
+    return { error: "A department cannot be its own parent." };
+  }
+
+  // Validate parent department exists if provided
+  if (parent_department_id) {
+    const { data: parentExists } = await supabase
+      .from("departments")
+      .select("id")
+      .eq("id", parent_department_id)
+      .single();
+
+    if (!parentExists) {
+      return { error: "Selected parent department does not exist." };
+    }
+
+    // Check for circular reference using RPC function
+    const { data: wouldCreateCycle } = await supabase.rpc('check_department_cycle', {
+      dept_id: departmentId,
+      new_parent_id: parent_department_id
+    });
+
+    if (wouldCreateCycle) {
+      return { error: "This would create a circular reference in the department hierarchy." };
+    }
+  }
 
   const { error } = await supabase
-    .from("department")
+    .from("departments")
     .update({
-      department_name,
-      parent_department_id: parent_department_id,
-      modified_by: "admin", // Placeholder
+      name,
+      parent_department_id: parent_department_id || null,
     })
-    .eq("department_id", departmentId);
+    .eq("id", departmentId);
 
   if (error) {
-    console.error("Error updating department:", error);
-    return { error: "Failed to update department. " + error.message };
+    return { error: "Failed to update department: " + error.message };
   }
 
   revalidatePath("/hr/admin/departments");
   return { success: "Department updated successfully." };
 }
 
+export async function deleteDepartment(departmentId: string) {
+  const supabase = await createClient();
 
-export async function deleteDepartment(departmentId: number) {
-    const supabase = await createClient();
+  // Validate department ID
+  const idValidation = deleteDepartmentSchema.safeParse({ id: departmentId });
+  if (!idValidation.success) {
+    return { error: "Invalid department ID." };
+  }
 
-    // Optional: Check if department has child departments before deleting
-    const { data: children } = await supabase.from('department').select('department_id').eq('parent_department_id', departmentId).limit(1);
+  // Check if department exists
+  const { data: department } = await supabase
+    .from("departments")
+    .select("id, name")
+    .eq("id", departmentId)
+    .single();
 
-    if (children && children.length > 0) {
-        return { error: "Cannot delete department with sub-departments. Please reassign them first." };
-    }
+  if (!department) {
+    return { error: "Department not found." };
+  }
 
-    const { error } = await supabase.from("department").delete().eq("department_id", departmentId);
+  // Check if department has children
+  const hasChildren = await departmentHasChildren(departmentId);
+  if (hasChildren) {
+    return { 
+      error: "Cannot delete department with sub-departments. Please reassign or delete them first." 
+    };
+  }
 
-    if (error) {
-        console.error("Error deleting department:", error);
-        return { error: "Failed to delete department. " + error.message };
-    }
+  // Check if department is assigned to any employees
+  const { data: employees } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("department_id", departmentId)
+    .limit(1);
 
-    revalidatePath("/hr/admin/departments");
-    return { success: "Department deleted successfully." };
+  if (employees && employees.length > 0) {
+    return { 
+      error: "Cannot delete department that has employees assigned. Please reassign employees first." 
+    };
+  }
+
+  const { error } = await supabase
+    .from("departments")
+    .delete()
+    .eq("id", departmentId);
+
+  if (error) {
+    return { error: "Failed to delete department: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/departments");
+  return { success: "Department deleted successfully." };
 }

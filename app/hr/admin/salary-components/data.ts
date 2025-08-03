@@ -1,36 +1,34 @@
 // /app/hr/admin/salary-components/data.ts
-"use server";
 
 import { createClient } from "@/utils/supabase/server";
 
-// Type definition for a single salary component type object.
-export type SalaryComponentType = {
-  component_type_id: number;
+// Type definition to match your new 'salary_components' table schema
+export type SalaryComponent = {
+  id: string; // UUID
   name: string;
-  description: string | null;
-  is_taxable: boolean;
-  is_basic_salary: boolean;
-  display_order: number;
-  main_account_code: string | null;
-  dimension_1: string | null;
-  dimension_2: string | null;
-  dimension_3: string | null;
-  dimension_4: string | null;
-  dimension_5: string | null;
-  created_date: string;
+  name_arabic: string | null;
+  type: string; // enum: component_type
+  computation_type: string;
+  calculation_method: string; // enum: component_calculation_method
+  main_account_code: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
 /**
- * Fetches all salary component types from the database using an RPC call.
+ * Fetches all salary components from the database using an RPC call.
  */
-export async function getSalaryComponentTypes(): Promise<SalaryComponentType[]> {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc('get_all_salary_component_types');
+export async function getSalaryComponents(): Promise<SalaryComponent[]> {
+  const supabase = await createClient();
 
-    if (error) {
-        console.error("Error fetching salary component types:", error);
-        return [];
-    }
-    
-    return (data as SalaryComponentType[]) || [];
+  // Call RPC function to get all salary components
+  const { data, error } = await supabase.rpc('get_all_salary_components');
+
+  if (error) {
+    console.error("Error fetching salary components:", error);
+    return [];
+  }
+  
+  return (data as SalaryComponent[]) || [];
 }

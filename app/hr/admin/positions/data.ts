@@ -1,28 +1,26 @@
-// /app/hr/admin/position-types/data.ts
-"use server";
+// /app/hr/admin/designations/data.ts
 
 import { createClient } from "@/utils/supabase/server";
 
-// Simplified type definition for a single position type object.
-export type PositionType = {
-  position_type_id: number;
-  title: string | null;
-  description: string | null;
-  created_date: string;
+// Type definition to match your new 'designations' table schema
+export type Designation = {
+  id: string; // UUID
+  name: string;
 };
 
 /**
- * Fetches all position types from the database using an RPC call.
- * @returns A promise that resolves to an array of PositionType objects.
+ * Fetches all designations from the database using an RPC call.
  */
-export async function getPositionTypes(): Promise<PositionType[]> {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc('get_all_position_types');
+export async function getDesignations(): Promise<Designation[]> {
+  const supabase = await createClient();
 
-    if (error) {
-        console.error("Error fetching position types:", error);
-        return [];
-    }
-    
-    return (data as PositionType[]) || [];
+  // Call RPC function to get all designations
+  const { data, error } = await supabase.rpc('get_all_designations');
+
+  if (error) {
+    console.error("Error fetching designations:", error);
+    return [];
+  }
+  
+  return (data as Designation[]) || [];
 }

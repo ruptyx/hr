@@ -1,102 +1,205 @@
+// /app/hr/admin/salary-components/actions.ts
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { salaryComponentSchema } from "./schemas";
+import { salaryComponentSchema, deleteSalaryComponentSchema } from "./schemas";
 
-const getSalaryComponentDataFromFormData = (formData: FormData) => {
-  const validatedFields = salaryComponentSchema.safeParse({
+export async function addSalaryComponent(formData: FormData) {
+  const supabase = await createClient();
+
+  const rawData = {
     name: formData.get("name"),
-    description: formData.get("description"),
-    is_taxable: formData.get("is_taxable") === "on",
-    is_basic_salary: formData.get("is_basic_salary") === "on",
-    display_order: formData.get("display_order"),
+    name_arabic: formData.get("name_arabic"),
+    type: formData.get("type"),
+    computation_type: formData.get("computation_type"),
+    calculation_method: formData.get("calculation_method"),
     main_account_code: formData.get("main_account_code"),
-    dimension_1: formData.get("dimension_1"),
-    dimension_2: formData.get("dimension_2"),
-    dimension_3: formData.get("dimension_3"),
-    dimension_4: formData.get("dimension_4"),
-    dimension_5: formData.get("dimension_5"),
-  });
+    is_active: formData.get("is_active") === "true",
+  };
+
+  const validatedFields = salaryComponentSchema.safeParse(rawData);
 
   if (!validatedFields.success) {
-    throw new Error(validatedFields.error.message);
+    return {
+      error: validatedFields.error.flatten().fieldErrors,
+    };
   }
 
-  return {
-    ...validatedFields.data,
-    created_by: "admin", // Placeholder
-    modified_by: "admin", // Placeholder
-  };
-};
+  const { 
+    name, 
+    name_arabic, 
+    type, 
+    computation_type, 
+    calculation_method, 
+    main_account_code, 
+    is_active 
+  } = validatedFields.data;
 
-export async function addSalaryComponentType(formData: FormData) {
-  const supabase = await createClient();
-  try {
-    const componentData = getSalaryComponentDataFromFormData(formData);
+  // Check if salary component with same name already exists
+  const { data: existingComponent } = await supabase
+    .from("salary_components")
+    .select("id")
+    .ilike("name", name)
+    .single();
 
-    const { error } = await supabase
-      .from("salary_component_type")
-      .insert(componentData);
-
-    if (error) {
-      console.error("Error adding salary component type:", error);
-      return { error: "Failed to add component. " + error.message };
-    }
-
-    revalidatePath("/hr/admin/salary-components");
-    return { success: "Salary component added successfully." };
-  } catch (e: any) {
-    return { error: e.message };
+  if (existingComponent) {
+    return { error: "A salary component with this name already exists." };
   }
+
+  const { error } = await supabase.from("salary_components").insert({
+    name,
+    name_arabic,
+    type,
+    computation_type,
+    calculation_method,
+    main_account_code,
+    is_active,
+  });
+
+  if (error) {
+    return { error: "Failed to add salary component: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/salary-components");
+  return { success: "Salary component added successfully." };
 }
 
-export async function updateSalaryComponentType(
-  componentTypeId: number,
+export async function updateSalaryComponent(
+  componentId: string,
   formData: FormData
 ) {
   const supabase = await createClient();
-  try {
-    const componentData = getSalaryComponentDataFromFormData(formData);
 
-    const { error } = await supabase
-      .from("salary_component_type")
-      .update(componentData)
-      .eq("component_type_id", componentTypeId);
-
-    if (error) {
-      console.error("Error updating salary component type:", error);
-      return { error: "Failed to update component. " + error.message };
-    }
-
-    revalidatePath("/hr/admin/salary-components");
-    return { success: "Salary component updated successfully." };
-  } catch (e: any) {
-    return { error: e.message };
+  // Validate component ID
+  const idValidation = deleteSalaryComponentSchema.safeParse({ id: componentId });
+  if (!idValidation.success) {
+    return { error: "Invalid salary component ID." };
   }
-}
 
-export async function deleteSalaryComponentType(componentTypeId: number) {
-  const supabase = await createClient();
+  const rawData = {
+    name: formData.get("name"),
+    name_arabic: formData.get("name_arabic"),
+    type: formData.get("type"),
+    computation_type: formData.get("computation_type"),
+    calculation_method: formData.get("calculation_method"),
+    main_account_code: formData.get("main_account_code"),
+    is_active: formData.get("is_active") === "true",
+  };
 
-  const { data: components } = await supabase
-    .from("compensation_component")
-    .select("compensation_component_id")
-    .eq("component_type_id", componentTypeId)
-    .limit(1);
+  const validatedFields = salaryComponentSchema.safeParse(rawData);
 
-  if (components && components.length > 0) {
-    return { error: "Cannot delete a component type that is in use." };
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { 
+    name, 
+    name_arabic, 
+    type, 
+    computation_type, 
+    calculation_method, 
+    main_account_code, 
+    is_active 
+  } = validatedFields.data;
+
+  // Check if component exists
+  const { data: component } = await supabase
+    .from("salary_components")
+    .select("id, name")
+    .eq("id", componentId)
+    .single();
+
+  if (!component) {
+    return { error: "Salary component not found." };
+  }
+
+  // Check if another component with same name already exists (excluding current one)
+  const { data: existingComponent } = await supabase
+    .from("salary_components")
+    .select("id")
+    .ilike("name", name)
+    .neq("id", componentId)
+    .single();
+
+  if (existingComponent) {
+    return { error: "A salary component with this name already exists." };
   }
 
   const { error } = await supabase
-    .from("salary_component_type")
-    .delete()
-    .eq("component_type_id", componentTypeId);
+    .from("salary_components")
+    .update({
+      name,
+      name_arabic,
+      type,
+      computation_type,
+      calculation_method,
+      main_account_code,
+      is_active,
+    })
+    .eq("id", componentId);
 
   if (error) {
-    console.error("Error deleting salary component type:", error);
-    return { error: "Failed to delete component. " + error.message };
+    return { error: "Failed to update salary component: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/salary-components");
+  return { success: "Salary component updated successfully." };
+}
+
+export async function deleteSalaryComponent(componentId: string) {
+  const supabase = await createClient();
+
+  // Validate component ID
+  const idValidation = deleteSalaryComponentSchema.safeParse({ id: componentId });
+  if (!idValidation.success) {
+    return { error: "Invalid salary component ID." };
+  }
+
+  // Check if component exists
+  const { data: component } = await supabase
+    .from("salary_components")
+    .select("id, name")
+    .eq("id", componentId)
+    .single();
+
+  if (!component) {
+    return { error: "Salary component not found." };
+  }
+
+  // Check if component is referenced in other tables
+  const checks = [
+    // Check leave settings references
+    { table: "leave_settings", fields: ["public_holiday_component_id", "rest_day_component_id", "pay_now_component_id", "advance_earning_component_id", "advance_deduction_component_id"] },
+    // Check leave types references
+    { table: "leave_types", fields: ["leave_payment_component_id", "encashment_payment_component_id"] },
+    // Check indemnity schemes references
+    { table: "indemnity_schemes", fields: ["earning_salary_component_id"] }
+  ];
+
+  for (const check of checks) {
+    for (const field of check.fields) {
+      const { data: references } = await supabase
+        .from(check.table)
+        .select("id")
+        .eq(field, componentId)
+        .limit(1);
+
+      if (references && references.length > 0) {
+        return { 
+          error: `Cannot delete salary component that is referenced in ${check.table}. Please remove references first.` 
+        };
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from("salary_components")
+    .delete()
+    .eq("id", componentId);
+
+  if (error) {
+    return { error: "Failed to delete salary component: " + error.message };
   }
 
   revalidatePath("/hr/admin/salary-components");

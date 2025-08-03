@@ -1,109 +1,266 @@
+// /app/hr/admin/leave-types/actions.ts
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { leaveTypeSchema } from "./schemas";
-
-const getLeaveTypeDataFromFormData = (formData: FormData) => {
-  const validatedFields = leaveTypeSchema.safeParse({
-    name: formData.get("name"),
-    policy_type: formData.get("policy_type"),
-    description: formData.get("description"),
-    is_paid: formData.get("is_paid") === "on",
-    accrual_rate: formData.get("accrual_rate"),
-    max_accrual_hours: formData.get("max_accrual_hours"),
-    carryover_allowed: formData.get("carryover_allowed") === "on",
-    max_carryover_hours: formData.get("max_carryover_hours"),
-    min_employment_months: formData.get("min_employment_months"),
-    gender_restriction: formData.get("gender_restriction"),
-    usage_period: formData.get("usage_period"),
-    max_times_usable: formData.get("max_times_usable"),
-    max_days_per_occurrence: formData.get("max_days_per_occurrence"),
-    requires_documentation: formData.get("requires_documentation") === "on",
-  });
-
-  if (!validatedFields.success) {
-    throw new Error(validatedFields.error.message);
-  }
-
-  const { policy_type, ...rest } = validatedFields.data;
-  const isGranted = policy_type === "granted";
-
-  const toHours = (days: number | null | undefined) => (days ? days * 8 : null);
-
-  return {
-    ...rest,
-    accrual_rate: isGranted ? null : toHours(validatedFields.data.accrual_rate),
-    max_accrual_hours: toHours(validatedFields.data.max_accrual_hours),
-    max_carryover_hours: toHours(validatedFields.data.max_carryover_hours),
-    created_by: "admin",
-    modified_by: "admin",
-  };
-};
+import { leaveTypeSchema, deleteLeaveTypeSchema } from "./schemas";
 
 export async function addLeaveType(formData: FormData) {
   const supabase = await createClient();
-  try {
-    const leaveTypeData = getLeaveTypeDataFromFormData(formData);
 
-    const { error } = await supabase.from("leave_type").insert(leaveTypeData);
+  const rawData = {
+    code: formData.get("code"),
+    name: formData.get("name"),
+    name_arabic: formData.get("name_arabic"),
+    behavior_type: formData.get("behavior_type"),
+    eligibility_after_days: formData.get("eligibility_after_days") 
+      ? Number(formData.get("eligibility_after_days")) 
+      : undefined,
+    total_days_allowed_per_year: formData.get("total_days_allowed_per_year") 
+      ? Number(formData.get("total_days_allowed_per_year")) 
+      : undefined,
+    attachment_is_mandatory: formData.get("attachment_is_mandatory") === "true",
+    leave_payment_component_id: formData.get("leave_payment_component_id") || undefined,
+    encashment_payment_component_id: formData.get("encashment_payment_component_id") || undefined,
+    expense_account_code: formData.get("expense_account_code") || undefined,
+    provision_account_code: formData.get("provision_account_code") || undefined,
+    is_active: formData.get("is_active") === "true",
+  };
 
-    if (error) {
-      console.error("Error adding leave type:", error);
-      return { error: "Failed to add leave type. " + error.message };
-    }
+  const validatedFields = leaveTypeSchema.safeParse(rawData);
 
-    revalidatePath("/hr/admin/leave-types");
-    return { success: "Leave type added successfully." };
-  } catch (e: any) {
-    return { error: e.message };
+  if (!validatedFields.success) {
+    return {
+      error: validatedFields.error.flatten().fieldErrors,
+    };
   }
+
+  const { 
+    code,
+    name, 
+    name_arabic, 
+    behavior_type, 
+    eligibility_after_days,
+    total_days_allowed_per_year,
+    attachment_is_mandatory,
+    leave_payment_component_id,
+    encashment_payment_component_id,
+    expense_account_code,
+    provision_account_code,
+    is_active 
+  } = validatedFields.data;
+
+  // Check if leave type with same code already exists
+  const { data: existingLeaveType } = await supabase
+    .from("leave_types")
+    .select("id")
+    .ilike("code", code)
+    .single();
+
+  if (existingLeaveType) {
+    return { error: "A leave type with this code already exists." };
+  }
+
+  // Check if leave type with same name already exists
+  const { data: existingName } = await supabase
+    .from("leave_types")
+    .select("id")
+    .ilike("name", name)
+    .single();
+
+  if (existingName) {
+    return { error: "A leave type with this name already exists." };
+  }
+
+  const { error } = await supabase.from("leave_types").insert({
+    code,
+    name,
+    name_arabic,
+    behavior_type,
+    eligibility_after_days,
+    total_days_allowed_per_year,
+    attachment_is_mandatory,
+    leave_payment_component_id,
+    encashment_payment_component_id,
+    expense_account_code,
+    provision_account_code,
+    is_active,
+  });
+
+  if (error) {
+    return { error: "Failed to add leave type: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/leave-types");
+  return { success: "Leave type added successfully." };
 }
 
-export async function updateLeaveType(leaveTypeId: number, formData: FormData) {
+export async function updateLeaveType(
+  leaveTypeId: string,
+  formData: FormData
+) {
   const supabase = await createClient();
-  try {
-    const leaveTypeData = getLeaveTypeDataFromFormData(formData);
 
-    const { error } = await supabase
-      .from("leave_type")
-      .update(leaveTypeData)
-      .eq("leave_type_id", leaveTypeId);
-
-    if (error) {
-      console.error("Error updating leave type:", error);
-      return { error: "Failed to update leave type. " + error.message };
-    }
-
-    revalidatePath("/hr/admin/leave-types");
-    return { success: "Leave type updated successfully." };
-  } catch (e: any) {
-    return { error: e.message };
+  // Validate leave type ID
+  const idValidation = deleteLeaveTypeSchema.safeParse({ id: leaveTypeId });
+  if (!idValidation.success) {
+    return { error: "Invalid leave type ID." };
   }
+
+  const rawData = {
+    code: formData.get("code"),
+    name: formData.get("name"),
+    name_arabic: formData.get("name_arabic"),
+    behavior_type: formData.get("behavior_type"),
+    eligibility_after_days: formData.get("eligibility_after_days") 
+      ? Number(formData.get("eligibility_after_days")) 
+      : undefined,
+    total_days_allowed_per_year: formData.get("total_days_allowed_per_year") 
+      ? Number(formData.get("total_days_allowed_per_year")) 
+      : undefined,
+    attachment_is_mandatory: formData.get("attachment_is_mandatory") === "true",
+    leave_payment_component_id: formData.get("leave_payment_component_id") || undefined,
+    encashment_payment_component_id: formData.get("encashment_payment_component_id") || undefined,
+    expense_account_code: formData.get("expense_account_code") || undefined,
+    provision_account_code: formData.get("provision_account_code") || undefined,
+    is_active: formData.get("is_active") === "true",
+  };
+
+  const validatedFields = leaveTypeSchema.safeParse(rawData);
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { 
+    code,
+    name, 
+    name_arabic, 
+    behavior_type, 
+    eligibility_after_days,
+    total_days_allowed_per_year,
+    attachment_is_mandatory,
+    leave_payment_component_id,
+    encashment_payment_component_id,
+    expense_account_code,
+    provision_account_code,
+    is_active 
+  } = validatedFields.data;
+
+  // Check if leave type exists
+  const { data: leaveType } = await supabase
+    .from("leave_types")
+    .select("id, code, name")
+    .eq("id", leaveTypeId)
+    .single();
+
+  if (!leaveType) {
+    return { error: "Leave type not found." };
+  }
+
+  // Check if another leave type with same code already exists (excluding current one)
+  const { data: existingCode } = await supabase
+    .from("leave_types")
+    .select("id")
+    .ilike("code", code)
+    .neq("id", leaveTypeId)
+    .single();
+
+  if (existingCode) {
+    return { error: "A leave type with this code already exists." };
+  }
+
+  // Check if another leave type with same name already exists (excluding current one)
+  const { data: existingName } = await supabase
+    .from("leave_types")
+    .select("id")
+    .ilike("name", name)
+    .neq("id", leaveTypeId)
+    .single();
+
+  if (existingName) {
+    return { error: "A leave type with this name already exists." };
+  }
+
+  const { error } = await supabase
+    .from("leave_types")
+    .update({
+      code,
+      name,
+      name_arabic,
+      behavior_type,
+      eligibility_after_days,
+      total_days_allowed_per_year,
+      attachment_is_mandatory,
+      leave_payment_component_id,
+      encashment_payment_component_id,
+      expense_account_code,
+      provision_account_code,
+      is_active,
+    })
+    .eq("id", leaveTypeId);
+
+  if (error) {
+    return { error: "Failed to update leave type: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/leave-types");
+  return { success: "Leave type updated successfully." };
 }
 
-export async function deleteLeaveType(leaveTypeId: number) {
+export async function deleteLeaveType(leaveTypeId: string) {
   const supabase = await createClient();
-  const { data: balances } = await supabase
-    .from("leave_balance")
-    .select("leave_type_id")
+
+  // Validate leave type ID
+  const idValidation = deleteLeaveTypeSchema.safeParse({ id: leaveTypeId });
+  if (!idValidation.success) {
+    return { error: "Invalid leave type ID." };
+  }
+
+  // Check if leave type exists
+  const { data: leaveType } = await supabase
+    .from("leave_types")
+    .select("id, name")
+    .eq("id", leaveTypeId)
+    .single();
+
+  if (!leaveType) {
+    return { error: "Leave type not found." };
+  }
+
+  // Check if leave type is referenced in leave_accrual_tiers
+  const { data: accrualTiers } = await supabase
+    .from("leave_accrual_tiers")
+    .select("id")
     .eq("leave_type_id", leaveTypeId)
     .limit(1);
 
-  if (balances && balances.length > 0) {
-    return {
-      error: "Cannot delete a leave type that is in use by an employee's balance.",
+  if (accrualTiers && accrualTiers.length > 0) {
+    return { 
+      error: "Cannot delete leave type that has accrual tiers. Please remove accrual tiers first." 
+    };
+  }
+
+  // Check if leave type is referenced in leave_payment_tiers
+  const { data: paymentTiers } = await supabase
+    .from("leave_payment_tiers")
+    .select("id")
+    .eq("leave_type_id", leaveTypeId)
+    .limit(1);
+
+  if (paymentTiers && paymentTiers.length > 0) {
+    return { 
+      error: "Cannot delete leave type that has payment tiers. Please remove payment tiers first." 
     };
   }
 
   const { error } = await supabase
-    .from("leave_type")
+    .from("leave_types")
     .delete()
-    .eq("leave_type_id", leaveTypeId);
+    .eq("id", leaveTypeId);
 
   if (error) {
-    console.error("Error deleting leave type:", error);
-    return { error: "Failed to delete leave type. " + error.message };
+    return { error: "Failed to delete leave type: " + error.message };
   }
 
   revalidatePath("/hr/admin/leave-types");

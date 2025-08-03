@@ -19,8 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { MoreHorizontal, PlusCircle, Trash2, Edit } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Trash2, Edit, Briefcase } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,68 +29,70 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { addPositionType, updatePositionType, deletePositionType } from "../actions";
-import { positionSchema } from "../schemas";
-import type { PositionType } from "../data";
+import { addDesignation, updateDesignation, deleteDesignation } from "../actions";
+import { designationSchema } from "../schemas";
+import type { Designation } from "../data";
 
-type PositionTypesClientPageProps = {
-  positionTypes: PositionType[];
+type DesignationsClientPageProps = {
+  designations: Designation[];
 };
 
-export function PositionTypesClientPage({
-  positionTypes: initialPositionTypes,
-}: PositionTypesClientPageProps) {
+export function DesignationsClientPage({
+  designations: initialDesignations,
+}: DesignationsClientPageProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentPositionType, setCurrentPositionType] =
-    useState<PositionType | null>(null);
+  const [currentDesignation, setCurrentDesignation] = useState<Designation | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<z.infer<typeof positionSchema>>({
-    resolver: zodResolver(positionSchema),
+  const form = useForm<z.infer<typeof designationSchema>>({
+    resolver: zodResolver(designationSchema),
     defaultValues: {
-      title: "",
-      description: "",
+      name: "",
     },
   });
 
-  const handleFormSubmit = async (values: z.infer<typeof positionSchema>) => {
+  const handleFormSubmit = async (values: z.infer<typeof designationSchema>) => {
+    setIsSubmitting(true);
+    
     const formData = new FormData();
-    formData.append("title", values.title);
-    if (values.description) {
-      formData.append("description", values.description);
-    }
+    formData.append("name", values.name);
 
-    const action = currentPositionType
-      ? updatePositionType.bind(null, currentPositionType.position_type_id)
-      : addPositionType;
+    const action = currentDesignation
+      ? updateDesignation.bind(null, currentDesignation.id)
+      : addDesignation;
 
     const result = await action(formData);
 
-    if (result.error) {
-      // Handle error (e.g., show toast notification)
+    if (result && 'error' in result && result.error) {
       console.error(result.error);
+      alert(typeof result.error === 'string' ? result.error : 'An error occurred');
     } else {
       setIsModalOpen(false);
       form.reset();
-      // Refresh data would happen here in a real app
+      setCurrentDesignation(null);
     }
+    
+    setIsSubmitting(false);
   };
 
   const openAddModal = () => {
-    setCurrentPositionType(null);
-    form.reset();
+    setCurrentDesignation(null);
+    form.reset({ name: "" });
     setIsModalOpen(true);
   };
 
-  const openEditModal = (pt: PositionType) => {
-    setCurrentPositionType(pt);
-    form.reset({ title: pt.title, description: pt.description || "" });
+  const openEditModal = (designation: Designation) => {
+    setCurrentDesignation(designation);
+    form.reset({
+      name: designation.name,
+    });
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm("Are you sure you want to delete this position type?")) {
-      const result = await deletePositionType(id);
-      if (result.error) {
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to delete this designation? This action cannot be undone.")) {
+      const result = await deleteDesignation(id);
+      if (result && 'error' in result && result.error) {
         alert(result.error);
       }
     }
@@ -102,23 +103,23 @@ export function PositionTypesClientPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Manage Position Types
+            Manage Designations
           </h1>
           <p className="text-neutral-500">
-            Create and manage job templates or role definitions.
+            Create and manage job titles and position designations for your organization.
           </p>
         </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
             <Button onClick={openAddModal}>
               <PlusCircle className="mr-2 h-4 w-4" />
-              Add Position Type
+              Add Designation
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {currentPositionType ? "Edit" : "Add"} Position Type
+                {currentDesignation ? "Edit" : "Add"} Designation
               </DialogTitle>
             </DialogHeader>
             <form
@@ -126,20 +127,26 @@ export function PositionTypesClientPage({
               className="space-y-4"
             >
               <div>
-                <Label htmlFor="title">Title</Label>
-                <Input {...form.register("title")} />
-                {form.formState.errors.title && (
+                <Label htmlFor="name">Designation Name *</Label>
+                <Input 
+                  {...form.register("name")} 
+                  placeholder="Enter designation name (e.g., Software Engineer, Manager)"
+                  disabled={isSubmitting}
+                />
+                {form.formState.errors.name && (
                   <p className="text-red-500 text-xs mt-1">
-                    {form.formState.errors.title.message}
+                    {form.formState.errors.name.message}
                   </p>
                 )}
               </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea {...form.register("description")} />
-              </div>
-              <Button type="submit" className="w-full">
-                {currentPositionType ? "Save Changes" : "Create Position Type"}
+
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting 
+                  ? "Saving..." 
+                  : currentDesignation 
+                    ? "Save Changes" 
+                    : "Create Designation"
+                }
               </Button>
             </form>
           </DialogContent>
@@ -150,42 +157,50 @@ export function PositionTypesClientPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Description</TableHead>
+              <TableHead>Designation Name</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {initialPositionTypes.map((pt) => (
-              <TableRow key={pt.position_type_id}>
-                <TableCell className="font-medium">{pt.title}</TableCell>
-                <TableCell className="max-w-sm truncate">
-                  {pt.description}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditModal(pt)}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(pt.position_type_id)}
-                        className="text-red-600"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {initialDesignations.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={2} className="text-center py-8 text-neutral-500">
+                  <Briefcase className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                  No designations found. Create your first designation to get started.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              initialDesignations.map((designation) => (
+                <TableRow key={designation.id}>
+                  <TableCell className="font-medium">
+                    {designation.name}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditModal(designation)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(designation.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          <span>Delete</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

@@ -1,240 +1,316 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { MoreHorizontal, PlusCircle, Trash2, Edit, CheckCircle, XCircle } from "lucide-react";
-
-// UI Components
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-
-// Actions, schema, and types
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { MoreHorizontal, PlusCircle, Trash2, Edit, Calculator } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { addPayrollSet, updatePayrollSet, deletePayrollSet } from "../actions";
-import { payrollSetSchema, type PayrollSetInput } from "../schemas";
-import type { PayrollSet, OrganizationOption } from "../data";
+import { payrollSetSchema } from "../schemas";
+import type { PayrollSet } from "../data";
 
 type PayrollSetsClientPageProps = {
   payrollSets: PayrollSet[];
-  organizations: OrganizationOption[];
 };
 
-// The main client component for the Payroll Sets UI.
+const calculationMethodLabels = {
+  fixed_days: "Fixed Days",
+  calendar_days: "Calendar Days", 
+  daily_wages: "Daily Wages"
+};
+
 export function PayrollSetsClientPage({
   payrollSets: initialPayrollSets,
-  organizations,
 }: PayrollSetsClientPageProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPayrollSet, setCurrentPayrollSet] = useState<PayrollSet | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // react-hook-form setup with Zod for validation
-  const form = useForm<PayrollSetInput>({
+  const form = useForm<z.infer<typeof payrollSetSchema>>({
     resolver: zodResolver(payrollSetSchema),
     defaultValues: {
-      name: "",
-      description: null,
-      company_party_id: undefined,
+      set_name: "",
+      set_name_arabic: "",
+      calculation_method: "fixed_days",
+      cut_off_day: 25,
+      working_hours_per_day: 8,
+      working_days_per_period: 26,
+      max_salary_deduction_percentage: undefined,
       is_active: true,
     },
   });
 
-  // Handles both adding and updating payroll sets
-  const handleFormSubmit = async (values: PayrollSetInput) => {
+  const handleFormSubmit = async (values: z.infer<typeof payrollSetSchema>) => {
     setIsSubmitting(true);
     
-    try {
-      const formData = new FormData();
-      formData.append("name", values.name);
-      formData.append("company_party_id", String(values.company_party_id));
-      
-      if (values.description) {
-        formData.append("description", values.description);
-      }
-      
-      // The checkbox value needs to be 'on' for FormData to pick it up correctly in the action
-      if (values.is_active) {
-        formData.append("is_active", "on");
-      }
-
-      // Determine whether to call the 'add' or 'update' action
-      const result = currentPayrollSet
-        ? await updatePayrollSet(currentPayrollSet.payroll_set_id, formData)
-        : await addPayrollSet(formData);
-
-      if (result.error) {
-        // In a real app, show a toast notification
-        alert("Error: " + result.error);
-        console.error(result.error);
-      } else {
-        // Close modal and reset form on success
-        // The page will automatically refresh thanks to revalidatePath in the action
-        setIsModalOpen(false);
-        setCurrentPayrollSet(null);
-        form.reset({
-          name: "",
-          description: null,
-          company_party_id: undefined,
-          is_active: true,
-        });
-      }
-    } catch (error) {
-      console.error("Form submission error:", error);
-      alert("An unexpected error occurred. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+    const formData = new FormData();
+    formData.append("set_name", values.set_name);
+    formData.append("set_name_arabic", values.set_name_arabic || "");
+    formData.append("calculation_method", values.calculation_method);
+    formData.append("cut_off_day", values.cut_off_day.toString());
+    formData.append("working_hours_per_day", values.working_hours_per_day.toString());
+    formData.append("working_days_per_period", values.working_days_per_period.toString());
+    if (values.max_salary_deduction_percentage) {
+      formData.append("max_salary_deduction_percentage", values.max_salary_deduction_percentage.toString());
     }
+    formData.append("is_active", values.is_active.toString());
+
+    const action = currentPayrollSet
+      ? updatePayrollSet.bind(null, currentPayrollSet.id)
+      : addPayrollSet;
+
+    const result = await action(formData);
+
+    if (result && 'error' in result && result.error) {
+      console.error(result.error);
+      alert(typeof result.error === 'string' ? result.error : 'An error occurred');
+    } else {
+      setIsModalOpen(false);
+      form.reset();
+      setCurrentPayrollSet(null);
+    }
+    
+    setIsSubmitting(false);
   };
 
-  // Prepares and opens the modal for adding a new item
   const openAddModal = () => {
     setCurrentPayrollSet(null);
     form.reset({
-      name: "",
-      description: null,
-      company_party_id: undefined,
+      set_name: "",
+      set_name_arabic: "",
+      calculation_method: "fixed_days",
+      cut_off_day: 25,
+      working_hours_per_day: 8,
+      working_days_per_period: 26,
+      max_salary_deduction_percentage: undefined,
       is_active: true,
     });
     setIsModalOpen(true);
   };
 
-  // Prepares and opens the modal for editing an existing item
-  const openEditModal = (ps: PayrollSet) => {
-    setCurrentPayrollSet(ps);
+  const openEditModal = (payrollSet: PayrollSet) => {
+    setCurrentPayrollSet(payrollSet);
     form.reset({
-      name: ps.name,
-      description: ps.description,
-      company_party_id: ps.company_party_id ?? undefined,
-      is_active: ps.is_active ?? true,
+      set_name: payrollSet.set_name,
+      set_name_arabic: payrollSet.set_name_arabic || "",
+      calculation_method: payrollSet.calculation_method as "fixed_days" | "calendar_days" | "daily_wages",
+      cut_off_day: payrollSet.cut_off_day,
+      working_hours_per_day: payrollSet.working_hours_per_day,
+      working_days_per_period: payrollSet.working_days_per_period,
+      max_salary_deduction_percentage: payrollSet.max_salary_deduction_percentage || undefined,
+      is_active: payrollSet.is_active,
     });
     setIsModalOpen(true);
   };
 
-  // Handles the delete action with a confirmation dialog
-  const handleDelete = async (id: number) => {
-    if (confirm("Are you sure you want to delete this payroll set?")) {
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to delete this payroll set? This action cannot be undone.")) {
       const result = await deletePayrollSet(id);
-      if (result.error) {
-        alert("Error: " + result.error);
-        console.error(result.error);
+      if (result && 'error' in result && result.error) {
+        alert(result.error);
       }
-      // Success message will be handled by revalidation showing updated data
     }
-  };
-
-  // Close modal handler
-  const handleModalClose = (open: boolean) => {
-    if (!open) {
-      setCurrentPayrollSet(null);
-      form.reset();
-    }
-    setIsModalOpen(open);
   };
 
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Manage Payroll Sets</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Manage Payroll Sets
+          </h1>
           <p className="text-neutral-500">
-            Group employees for payroll processing.
+            Create and configure payroll calculation rules for different employee groups.
           </p>
         </div>
-        <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
+        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
             <Button onClick={openAddModal}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Add Payroll Set
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
                 {currentPayrollSet ? "Edit" : "Add"} Payroll Set
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
-              {/* Name Field */}
+            <form
+              onSubmit={form.handleSubmit(handleFormSubmit)}
+              className="space-y-6"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="set_name">Set Name *</Label>
+                  <Input 
+                    {...form.register("set_name")} 
+                    placeholder="e.g., Full Time Employees"
+                    disabled={isSubmitting}
+                  />
+                  {form.formState.errors.set_name && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {form.formState.errors.set_name.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="set_name_arabic">Set Name (Arabic)</Label>
+                  <Input 
+                    {...form.register("set_name_arabic")} 
+                    placeholder="الاسم بالعربية"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
               <div>
-                <Label htmlFor="name">Name *</Label>
+                <Label htmlFor="calculation_method">Calculation Method *</Label>
+                <Controller
+                  name="calculation_method"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select calculation method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed_days">Fixed Days</SelectItem>
+                        <SelectItem value="calendar_days">Calendar Days</SelectItem>
+                        <SelectItem value="daily_wages">Daily Wages</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {form.formState.errors.calculation_method && (
+                  <p className="text-red-500 text-xs mt-1">
+                    {form.formState.errors.calculation_method.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="cut_off_day">Cut-off Day *</Label>
+                  <Input 
+                    type="number"
+                    min="1"
+                    max="31"
+                    {...form.register("cut_off_day", { valueAsNumber: true })}
+                    disabled={isSubmitting}
+                  />
+                  {form.formState.errors.cut_off_day && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {form.formState.errors.cut_off_day.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="working_hours_per_day">Hours/Day *</Label>
+                  <Input 
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="24"
+                    {...form.register("working_hours_per_day", { valueAsNumber: true })}
+                    disabled={isSubmitting}
+                  />
+                  {form.formState.errors.working_hours_per_day && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {form.formState.errors.working_hours_per_day.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="working_days_per_period">Days/Period *</Label>
+                  <Input 
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="31"
+                    {...form.register("working_days_per_period", { valueAsNumber: true })}
+                    disabled={isSubmitting}
+                  />
+                  {form.formState.errors.working_days_per_period && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {form.formState.errors.working_days_per_period.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="max_salary_deduction_percentage">Max Deduction % (Optional)</Label>
                 <Input 
-                  id="name" 
-                  {...form.register("name")} 
-                  maxLength={100}
-                  placeholder="Enter payroll set name"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  placeholder="e.g., 25 for 25%"
+                  {...form.register("max_salary_deduction_percentage", { valueAsNumber: true })}
+                  disabled={isSubmitting}
                 />
-                {form.formState.errors.name && (
+                <p className="text-xs text-neutral-500 mt-1">
+                  Maximum percentage of salary that can be deducted (for compliance with labor laws)
+                </p>
+                {form.formState.errors.max_salary_deduction_percentage && (
                   <p className="text-red-500 text-xs mt-1">
-                    {form.formState.errors.name.message}
+                    {form.formState.errors.max_salary_deduction_percentage.message}
                   </p>
                 )}
               </div>
 
-              {/* Company Selection */}
-              <div>
-                <Label htmlFor="company_party_id">Company *</Label>
-                <Select
-                  onValueChange={(value) => {
-                    const numValue = Number(value);
-                    form.setValue('company_party_id', numValue, { shouldValidate: true });
-                  }}
-                  value={form.watch("company_party_id")?.toString() || ""}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {organizations.map((org) => (
-                      <SelectItem key={org.party_id} value={String(org.party_id)}>
-                        {org.name || `Organization ${org.party_id}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.company_party_id && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {form.formState.errors.company_party_id.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Description Field */}
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea 
-                  id="description" 
-                  {...form.register("description")} 
-                  placeholder="Optional description"
-                  rows={3}
-                />
-                {form.formState.errors.description && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {form.formState.errors.description.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Active Checkbox */}
               <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="is_active"
-                  checked={form.watch("is_active")}
-                  onCheckedChange={(checked) => form.setValue("is_active", !!checked)}
+                <Controller
+                  name="is_active"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  )}
                 />
                 <Label htmlFor="is_active">Active</Label>
               </div>
@@ -242,7 +318,9 @@ export function PayrollSetsClientPage({
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting 
                   ? "Saving..." 
-                  : (currentPayrollSet ? "Save Changes" : "Create Payroll Set")
+                  : currentPayrollSet 
+                    ? "Save Changes" 
+                    : "Create Payroll Set"
                 }
               </Button>
             </form>
@@ -250,43 +328,53 @@ export function PayrollSetsClientPage({
         </Dialog>
       </div>
 
-      {/* Data Table */}
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Active</TableHead>
+              <TableHead>Set Name</TableHead>
+              <TableHead>Calculation Method</TableHead>
+              <TableHead>Cut-off Day</TableHead>
+              <TableHead>Hours/Days</TableHead>
+              <TableHead>Max Deduction %</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {initialPayrollSets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-neutral-500">
-                  No payroll sets found. Create your first one to get started.
+                <TableCell colSpan={7} className="text-center py-8 text-neutral-500">
+                  <Calculator className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                  No payroll sets found. Create your first payroll set to get started.
                 </TableCell>
               </TableRow>
             ) : (
-              initialPayrollSets.map((ps) => (
-                <TableRow key={ps.payroll_set_id}>
-                  <TableCell className="font-medium">{ps.name}</TableCell>
+              initialPayrollSets.map((payrollSet) => (
+                <TableRow key={payrollSet.id}>
                   <TableCell>
-                    {ps.company_name || "No company assigned"}
-                  </TableCell>
-                  <TableCell className="max-w-sm">
-                    <div className="truncate" title={ps.description || ""}>
-                      {ps.description || "—"}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {ps.is_active ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-neutral-400" />
+                    <div className="font-medium">{payrollSet.set_name}</div>
+                    {payrollSet.set_name_arabic && (
+                      <div className="text-sm text-neutral-500">{payrollSet.set_name_arabic}</div>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {calculationMethodLabels[payrollSet.calculation_method as keyof typeof calculationMethodLabels]}
+                  </TableCell>
+                  <TableCell>{payrollSet.cut_off_day}</TableCell>
+                  <TableCell>
+                    {payrollSet.working_hours_per_day}h / {payrollSet.working_days_per_period}d
+                  </TableCell>
+                  <TableCell>
+                    {payrollSet.max_salary_deduction_percentage 
+                      ? `${payrollSet.max_salary_deduction_percentage}%` 
+                      : "—"
+                    }
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={payrollSet.is_active ? "default" : "secondary"}>
+                      {payrollSet.is_active ? "Active" : "Inactive"}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -297,16 +385,16 @@ export function PayrollSetsClientPage({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEditModal(ps)}>
+                        <DropdownMenuItem onClick={() => openEditModal(payrollSet)}>
                           <Edit className="mr-2 h-4 w-4" />
-                          Edit
+                          <span>Edit</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleDelete(ps.payroll_set_id)}
-                          className="text-red-600 focus:text-red-500"
+                          onClick={() => handleDelete(payrollSet.id)}
+                          className="text-red-600"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
+                          <span>Delete</span>
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

@@ -1,97 +1,148 @@
+// /app/hr/admin/designations/actions.ts
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { positionSchema } from "./schemas";
+import { designationSchema, deleteDesignationSchema } from "./schemas";
 
-const getPositionTypeDataFromFormData = (formData: FormData) => {
-  const validatedFields = positionSchema.safeParse({
-    title: formData.get("title"),
-    description: formData.get("description"),
+export async function addDesignation(formData: FormData) {
+  const supabase = await createClient();
+
+  const validatedFields = designationSchema.safeParse({
+    name: formData.get("name"),
   });
 
   if (!validatedFields.success) {
-    throw new Error(validatedFields.error.message);
+    return {
+      error: validatedFields.error.flatten().fieldErrors,
+    };
   }
 
-  return {
-    ...validatedFields.data,
-    created_by: "admin", // Placeholder
-    modified_by: "admin", // Placeholder
-  };
-};
+  const { name } = validatedFields.data;
 
-export async function addPositionType(formData: FormData) {
-  const supabase = await createClient();
-  try {
-    const positionTypeData = getPositionTypeDataFromFormData(formData);
+  // Check if designation with same name already exists
+  const { data: existingDesignation } = await supabase
+    .from("designations")
+    .select("id")
+    .ilike("name", name)
+    .single();
 
-    const { error } = await supabase
-      .from("position_type")
-      .insert(positionTypeData);
-
-    if (error) {
-      console.error("Error adding position type:", error);
-      return { error: "Failed to add position type. " + error.message };
-    }
-
-    revalidatePath("/hr/admin/positions");
-    return { success: "Position type added successfully." };
-  } catch (e: any) {
-    return { error: e.message };
+  if (existingDesignation) {
+    return { error: "A designation with this name already exists." };
   }
+
+  const { error } = await supabase.from("designations").insert({
+    name,
+  });
+
+  if (error) {
+    return { error: "Failed to add designation: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/designations");
+  return { success: "Designation added successfully." };
 }
 
-export async function updatePositionType(
-  positionTypeId: number,
+export async function updateDesignation(
+  designationId: string,
   formData: FormData
 ) {
   const supabase = await createClient();
-  try {
-    const positionTypeData = getPositionTypeDataFromFormData(formData);
 
-    const { error } = await supabase
-      .from("position_type")
-      .update(positionTypeData)
-      .eq("position_type_id", positionTypeId);
-
-    if (error) {
-      console.error("Error updating position type:", error);
-      return { error: "Failed to update position type. " + error.message };
-    }
-
-    revalidatePath("/hr/admin/positions");
-    return { success: "Position type updated successfully." };
-  } catch (e: any) {
-    return { error: e.message };
+  // Validate designation ID
+  const idValidation = deleteDesignationSchema.safeParse({ id: designationId });
+  if (!idValidation.success) {
+    return { error: "Invalid designation ID." };
   }
+
+  const validatedFields = designationSchema.safeParse({
+    name: formData.get("name"),
+  });
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { name } = validatedFields.data;
+
+  // Check if designation exists
+  const { data: designation } = await supabase
+    .from("designations")
+    .select("id, name")
+    .eq("id", designationId)
+    .single();
+
+  if (!designation) {
+    return { error: "Designation not found." };
+  }
+
+  // Check if another designation with same name already exists (excluding current one)
+  const { data: existingDesignation } = await supabase
+    .from("designations")
+    .select("id")
+    .ilike("name", name)
+    .neq("id", designationId)
+    .single();
+
+  if (existingDesignation) {
+    return { error: "A designation with this name already exists." };
+  }
+
+  const { error } = await supabase
+    .from("designations")
+    .update({ name })
+    .eq("id", designationId);
+
+  if (error) {
+    return { error: "Failed to update designation: " + error.message };
+  }
+
+  revalidatePath("/hr/admin/designations");
+  return { success: "Designation updated successfully." };
 }
 
-export async function deletePositionType(positionTypeId: number) {
+export async function deleteDesignation(designationId: string) {
   const supabase = await createClient();
 
-  const { data: positions } = await supabase
-    .from("position")
-    .select("position_id")
-    .eq("position_type_id", positionTypeId)
+  // Validate designation ID
+  const idValidation = deleteDesignationSchema.safeParse({ id: designationId });
+  if (!idValidation.success) {
+    return { error: "Invalid designation ID." };
+  }
+
+  // Check if designation exists
+  const { data: designation } = await supabase
+    .from("designations")
+    .select("id, name")
+    .eq("id", designationId)
+    .single();
+
+  if (!designation) {
+    return { error: "Designation not found." };
+  }
+
+  // Check if designation is assigned to any employees
+  const { data: employees } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("designation_id", designationId)
     .limit(1);
 
-  if (positions && positions.length > 0) {
-    return {
-      error: "Cannot delete a position type that is currently in use by a position.",
+  if (employees && employees.length > 0) {
+    return { 
+      error: "Cannot delete designation that has employees assigned. Please reassign employees first." 
     };
   }
 
   const { error } = await supabase
-    .from("position_type")
+    .from("designations")
     .delete()
-    .eq("position_type_id", positionTypeId);
+    .eq("id", designationId);
 
   if (error) {
-    console.error("Error deleting position type:", error);
-    return { error: "Failed to delete position type. " + error.message };
+    return { error: "Failed to delete designation: " + error.message };
   }
 
-  revalidatePath("/hr/admin/positions");
-  return { success: "Position type deleted successfully." };
+  revalidatePath("/hr/admin/designations");
+  return { success: "Designation deleted successfully." };
 }
