@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateEmployeeAction } from "../actions";
+import { updateEmployee } from "../actions"; // Fixed import name
 import { SalaryForm } from "./salary-form";
 import {
   EmployeeDetail,
@@ -35,7 +35,7 @@ export function EditEmployeeForm({
   compensation,
 }: EditEmployeeFormProps) {
   const initialState = { message: "", errors: {} };
-  const updateEmployeeWithId = updateEmployeeAction.bind(null, employee.party_id);
+  const updateEmployeeWithId = updateEmployee.bind(null, employee.party_id); // Fixed function name
   const [state, dispatch] = useFormState(updateEmployeeWithId, initialState);
 
   return (
